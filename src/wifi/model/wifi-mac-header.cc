@@ -136,6 +136,11 @@ WifiMacHeader::SetType(WifiMacType type, bool resetToDsFromDs)
 {
     switch (type)
     {
+        // Attempt to add Channel Sounding : new Wifi Mac NDPA
+    case WIFI_MAC_CTL_NDPA:
+        m_ctrlType = TYPE_CTL;
+        m_ctrlSubtype = SUBTYPE_CTL_NDPANNOUNCE;
+        break;
     case WIFI_MAC_CTL_TRIGGER:
         m_ctrlType = TYPE_CTL;
         m_ctrlSubtype = SUBTYPE_CTL_TRIGGER;
@@ -522,6 +527,9 @@ WifiMacHeader::GetType() const
     case TYPE_CTL:
         switch (m_ctrlSubtype)
         {
+            // Attempt to add Channel Sounding : new Wifi Mac NDPA
+        case SUBTYPE_CTL_NDPANNOUNCE:
+            return WIFI_MAC_CTL_NDPA;
         case SUBTYPE_CTL_TRIGGER:
             return WIFI_MAC_CTL_TRIGGER;
         case SUBTYPE_CTL_BACKREQ:
@@ -1015,6 +1023,7 @@ WifiMacHeader::GetSize() const
         case SUBTYPE_CTL_TRIGGER:
         case SUBTYPE_CTL_END:
         case SUBTYPE_CTL_END_ACK:
+        case SUBTYPE_CTL_NDPANNOUNCE: // Attempt to add Channel Sounding : new Wifi Mac NDPA
             size = 2 + 2 + 6 + 6;
             break;
         case SUBTYPE_CTL_CTS:
@@ -1059,6 +1068,7 @@ WifiMacHeader::GetTypeString() const
         CASE_WIFI_MAC_TYPE(CTL_END_ACK);
         CASE_WIFI_MAC_TYPE(CTL_PSPOLL);
         CASE_WIFI_MAC_TYPE(CTL_TRIGGER);
+        CASE_WIFI_MAC_TYPE(CTL_NDPA); // Attempt to add Channel Sounding : new Wifi Mac NDPA
 
         CASE_WIFI_MAC_TYPE(MGT_BEACON);
         CASE_WIFI_MAC_TYPE(MGT_ASSOCIATION_REQUEST);
@@ -1135,6 +1145,11 @@ WifiMacHeader::Print(std::ostream& os) const
     case WIFI_MAC_CTL_PSPOLL:
         os << "Duration/ID=" << std::hex << m_duration << std::dec << ", BSSID(RA)=" << m_addr1
            << ", TA=" << m_addr2;
+        break;
+        // Attempt to add Channel Sounding : new Wifi Mac NDPA
+    case WIFI_MAC_CTL_NDPA:
+        os << "Duration/ID=" << m_duration << "us"
+           << ", RA=" << m_addr1 << ", TA=" << m_addr2;
         break;
     case WIFI_MAC_CTL_RTS:
     case WIFI_MAC_CTL_TRIGGER:
@@ -1258,6 +1273,10 @@ WifiMacHeader::Serialize(Buffer::Iterator i) const
         case SUBTYPE_CTL_END_ACK:
             WriteTo(i, m_addr2);
             break;
+            // Attempt to add Channel Sounding : new Wifi Mac NDPA
+        case SUBTYPE_CTL_NDPANNOUNCE:
+            WriteTo(i, m_addr2);
+            break;
         case SUBTYPE_CTL_CTS:
         case SUBTYPE_CTL_ACK:
             break;
@@ -1335,6 +1354,25 @@ WifiMacHeader::Deserialize(Buffer::Iterator start)
         break;
     }
     return i.GetDistanceFrom(start);
+}
+
+/*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    Public Functions for Wifi Mac Header
+    *************************************
+*/
+
+bool
+WifiMacHeader::IsNdpa(void) const
+{
+    return (GetType() == WIFI_MAC_CTL_NDPA);
+}
+
+bool
+WifiMacHeader::IsNdp(void) const
+{
+    return (GetType() == WIFI_MAC_DATA_NULL);
 }
 
 } // namespace ns3

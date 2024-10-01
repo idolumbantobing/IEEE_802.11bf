@@ -23,6 +23,8 @@
 #define MGT_HEADERS_H
 
 #include "capability-information.h"
+#include "cf-parameter-set.h"
+#include "ctrl-headers.h"
 #include "edca-parameter-set.h"
 #include "extended-capabilities.h"
 #include "reduced-neighbor-report.h"
@@ -31,6 +33,7 @@
 #include "supported-rates.h"
 #include "wifi-mgt-header.h"
 
+#include "ns3/cf-parameter-set.h"
 #include "ns3/dsss-parameter-set.h"
 #include "ns3/eht-capabilities.h"
 #include "ns3/eht-operation.h"
@@ -103,25 +106,27 @@ using ProbeRequestElems = std::tuple<Ssid,
                                      std::optional<EhtCapabilities>>;
 
 /// List of Information Elements included in Probe Response frames
-using ProbeResponseElems = std::tuple<Ssid,
-                                      SupportedRates,
-                                      std::optional<DsssParameterSet>,
-                                      std::optional<ErpInformation>,
-                                      std::optional<ExtendedSupportedRatesIE>,
-                                      std::optional<EdcaParameterSet>,
-                                      std::optional<HtCapabilities>,
-                                      std::optional<HtOperation>,
-                                      std::optional<ExtendedCapabilities>,
-                                      std::optional<VhtCapabilities>,
-                                      std::optional<VhtOperation>,
-                                      std::optional<ReducedNeighborReport>,
-                                      std::optional<HeCapabilities>,
-                                      std::optional<HeOperation>,
-                                      std::optional<MuEdcaParameterSet>,
-                                      std::optional<MultiLinkElement>,
-                                      std::optional<EhtCapabilities>,
-                                      std::optional<EhtOperation>,
-                                      std::vector<TidToLinkMapping>>;
+using ProbeResponseElems =
+    std::tuple<Ssid,
+               SupportedRates,
+               std::optional<CfParameterSet>, // Add : Modification to bring PCF back from ns3.33
+               std::optional<DsssParameterSet>,
+               std::optional<ErpInformation>,
+               std::optional<ExtendedSupportedRatesIE>,
+               std::optional<EdcaParameterSet>,
+               std::optional<HtCapabilities>,
+               std::optional<HtOperation>,
+               std::optional<ExtendedCapabilities>,
+               std::optional<VhtCapabilities>,
+               std::optional<VhtOperation>,
+               std::optional<ReducedNeighborReport>,
+               std::optional<HeCapabilities>,
+               std::optional<HeOperation>,
+               std::optional<MuEdcaParameterSet>,
+               std::optional<MultiLinkElement>,
+               std::optional<EhtCapabilities>,
+               std::optional<EhtOperation>,
+               std::vector<TidToLinkMapping>>;
 
 /// List of Information Elements included in Association Request frames
 using AssocRequestElems = std::tuple<Ssid,
@@ -494,6 +499,27 @@ class MgtProbeResponseHeader : public WifiMgtHeader<MgtProbeResponseHeader, Prob
      */
     uint64_t GetTimestamp() const;
 
+    /**
+     *  Add : Modification of beacon frame to bring back PCF functionallity .
+     *  Set function for the CF parameter.
+     * 
+     * \return void
+     */
+    void SetCfParameterSet(CfParameterSet cfParameterSet)
+    {
+        m_cfParameterSet = cfParameterSet;
+    }
+     /**
+     *  Add : Modification of beacon frame to bring back PCF functionallity .
+     *  Get function for the CF parameter.
+     * 
+     * \return CfParameterSet
+     */
+    CfParameterSet GetCfParameterSet(void) const
+    {
+        return m_cfParameterSet;
+    }
+
   protected:
     /** \copydoc Header::GetSerializedSize */
     uint32_t GetSerializedSizeImpl() const;
@@ -506,6 +532,7 @@ class MgtProbeResponseHeader : public WifiMgtHeader<MgtProbeResponseHeader, Prob
     uint64_t m_timestamp;               //!< Timestamp
     uint64_t m_beaconInterval;          //!< Beacon interval
     CapabilityInformation m_capability; //!< Capability information
+    CfParameterSet m_cfParameterSet;    //!< CF parameter set
 };
 
 /**
@@ -559,6 +586,7 @@ class WifiActionHeader : public Header
         DMG = 16,              // Category: DMG
         FST = 18,              // Category: Fast Session Transfer
         UNPROTECTED_DMG = 20,  // Category: Unprotected DMG
+        HE = 30,               // Category: He (Attempt to add Channel Sounding from ns3.37)
         PROTECTED_EHT = 37,    // Category: Protected EHT
         // Since vendor specific action has no stationary Action value,the parse process is not
         // here. Refer to vendor-specific-action in wave module.
@@ -717,6 +745,21 @@ class WifiActionHeader : public Header
         PROTECTED_EHT_MULTI_LINK_OPERATION_UPDATE_RESPONSE = 9,
     };
 
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    new enum for Wifi Action Header
+    *************************************
+    */
+
+    /// HeActionValue enumeration
+    enum HeActionValue
+    {
+        HE_COMPRESSED_BEAMFORMING_CQI = 0,
+        QUIET_TIME_PERIOD = 1,
+        OPS = 2,
+    };
+
     /**
      * typedef for union of different ActionValues
      */
@@ -731,8 +774,9 @@ class WifiActionHeader : public Header
         DmgActionValue dmgAction;                           ///< dmg
         FstActionValue fstAction;                           ///< fst
         UnprotectedDmgActionValue unprotectedDmgAction;     ///< unprotected dmg
-        ProtectedEhtActionValue protectedEhtAction;         ///< protected eht
-    } ActionValue;                                          ///< the action value
+        HeActionValue he; ///< he (Attempt to add Channel Sounding from ns3.37)
+        ProtectedEhtActionValue protectedEhtAction; ///< protected eht
+    } ActionValue;                                  ///< the action value
 
     /**
      * Set action for this Action header.
@@ -1162,6 +1206,424 @@ class MgtEmlOmn : public Header
     uint8_t m_dialogToken{0};                             //!< Dialog Token
     EmlControl m_emlControl{};                            //!< EML Control field
     std::optional<EmlsrParamUpdate> m_emlsrParamUpdate{}; //!< EMLSR Parameter Update field
+};
+
+/*
+*************************************
+Attempt to add Channel Sounding from ns3.37
+new Header for Wifi Management Header
+*************************************
+*/
+
+/**
+ * \ingroup wifi
+ *
+ * Implement HE MIMO Control field
+ */
+class HeMimoControlHeader : public Header
+{
+  public:
+    HeMimoControlHeader();
+    /**
+     * Constructoe
+     * \param ndpaHeader NDPA header from the beamformer
+     * \param aid11 AID11 of the beamformee
+     */
+    HeMimoControlHeader(CtrlNdpaHeader ndpaHeader, uint16_t aid11);
+    HeMimoControlHeader(const HeMimoControlHeader& heMimoControlHeader);
+    ~HeMimoControlHeader() override;
+
+    /**
+     * Register this type.
+     * \return The TypeId.
+     */
+    static TypeId GetTypeId();
+    TypeId GetInstanceTypeId() const override;
+    void Print(std::ostream& os) const override;
+    uint32_t GetSerializedSize() const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+
+    enum CsType
+    {
+        SU = 0,  //!< single-user channel sounding
+        MU = 1,  //!< multi-user channel sounding
+        CQI = 2, //!< CQI feedback
+    };
+
+    /**
+     * Set Nc subfield
+     * \param nc Nc subfield (the number of columns in the compressed beamforming matrix minus 1)
+     */
+    void SetNc(uint8_t nc);
+
+    /**
+     * Get Nc subfield
+     * \return Nc subfield (the number of columns in the compressed beamforming matrix minus 1)
+     */
+    uint8_t GetNc() const;
+
+    /**
+     * Set Nr subfield
+     * \param nr Nr subfield (the number of rows in the compressed beamforming matrix minus 1)
+     */
+    void SetNr(uint8_t nr);
+
+    /**
+     * Get Nr subfield
+     * \return Nr subfield (the number of rows in the compressed beamforming matrix minus 1)
+     */
+    uint8_t GetNr() const;
+
+    /**
+     * Set BW subfield given channel bandwidth
+     * \param bw channel bandwidth (20, 40, 80, or 160)
+     */
+    void SetBw(uint16_t bw);
+
+    /**
+     * Get channel bandwidth given BW subfield
+     * \return channel bandwidth (20, 40, 80, or 160)
+     */
+    uint16_t GetBw() const;
+
+    /**
+     * Set Grouping subfield given subcarrier grouping parameter Ng
+     * \param ng subcarrier grouping parameter Ng (4 or 16)
+     */
+    void SetGrouping(uint8_t ng);
+
+    /**
+     * Get subcarrier grouping parameter Ng given Grouping subfield
+     * \return subcarrier grouping parameter Ng (4 or 16)
+     */
+    uint8_t GetNg() const;
+
+    /**
+     * Set Codebook Information subfield
+     * \param codebookInfo Codebook Information subfield (If codebookInfo = 0, then codebook size of
+     * (4,2) and (7,5) is used for SU and MU channel sounding, respectively. If codebookInfo = 1,
+     * then codebook size of (6,4) and (9,7) is used for SU and MU channel sounding, respectively.)
+     */
+    void SetCodebookInfo(uint8_t codebookInfo);
+
+    /**
+     * Get Codebook Information subfield
+     * \return Codebook Information subfield (If codebookInfo = 0, then codebook size of (4,2) and
+     * (7,5) is used for SU and MU channel sounding, respectively. If codebookInfo = 1, then
+     * codebook size of (6,4) and (9,7) is used for SU and MU channel sounding, respectively.)
+     */
+    uint8_t GetCodebookInfo() const;
+
+    /**
+     * Set Feedback Type subfield
+     * \param feedbackType Feedback Type subfield
+     */
+    void SetFeedbackType(CsType feedbackType);
+
+    /**
+     * Get Feedback Type subfield
+     * \return Feedback Type subfield
+     */
+    CsType GetFeedbackType() const;
+
+    /**
+     * Set Ru Start subfield
+     * \param ruStart Ru Start subfield
+     */
+    void SetRuStart(uint8_t ruStart);
+
+    /**
+     * Get Ru Start subfield
+     * \return Ru Start subfield
+     */
+    uint8_t GetRuStart() const;
+
+    /**
+     * Set Ru End subfield
+     * \param ruEnd Ru End subfield
+     */
+    void SetRuEnd(uint8_t ruEnd);
+
+    /**
+     * Get Ru End subfield
+     * \return Ru End subfield
+     */
+    uint8_t GetRuEnd() const;
+
+    /**
+     * Set Remaining Feedback Segments subfield
+     * \param remainingFeedback Remaining Feedback Segments subfield
+     */
+    void SetRemainingFeedback(uint8_t remainingFeedback);
+
+    /**
+     * Get Remaining Feedback Segments subfield
+     * \return Remaining Feedback Segments subfield
+     */
+    uint8_t GetRemainingFeedback() const;
+
+    /**
+     * Set First Feedback Segments subfield
+     * \param firstFeedback First Feedback Segments subfield
+     */
+    void SetFirstFeedback(bool firstFeedback);
+
+    /**
+     * Get First Feedback Segments subfield
+     * \return First Feedback Segments subfield
+     */
+    uint8_t GetFirstFeedback() const;
+
+    /**
+     * Set Sounding Dialog oken subfield
+     * \param soundingDialogToken Sounding Dialog Token subfield
+     */
+    void SetSoundingDialogToken(uint8_t soundingDialogToken);
+
+    /**
+     * Get Sounding Dialog Token subfield
+     * \return Sounding Dialog Token subfield
+     */
+    uint8_t GetSoundingDialogToken() const;
+
+    /**
+     * Set Disallowed Subchannel Bitmap Present subfield
+     * \param present Disallowed Subchannel Bitmap Present subfield
+     */
+    void SetDisallowedSubchannelBitmapPresent(bool present);
+
+    /**
+     * Get Disallowed Subchannel Bitmap Present subfield
+     * \return Disallowed Subchannel Bitmap Present subfield
+     */
+    bool GetDisallowedSubchannelBitmapPresent() const;
+
+    /**
+     * Set Disallowed Subchannel Bitmap subfield
+     * \param bitmap Disallowed Subchannel Bitmap subfield
+     */
+    void SetDisallowedSubchannelBitmap(uint8_t bitmap);
+
+    /**
+     * Get Disallowed Subchannel Bitmap subfield
+     * \return Disallowed Subchannel Bitmap subfield
+     */
+    uint8_t GetDisallowedSubchannelBitmap() const;
+
+  private:
+    uint8_t m_nc; //!< Indicate the number of columns Nc in a compressed beamforming feedback matrix
+                  //!< and m_nc = Nc - 1
+    uint8_t m_nr; //!< Indicate the number of rows Nr in a compressed beamforming feedback matrix
+                  //!< and m_nr = Nr - 1
+    uint8_t m_bw; //!< Channel width
+    uint8_t m_grouping;     //!< Indicate subcarrier grouping. If m_grouping is 0, then Ng = 4. If
+                            //!< m_grouping is 1, then Ng = 16;
+    uint8_t m_codebookInfo; //!<  Codebook size subfield, (4,2) or (7,5) if m_codebookSize = 0,
+                            //!<  (6,4) or (9,7) if m_codebookSize = 1
+    uint8_t m_feedbackType; //!< Feedback Type: SU, MU or CQI
+    uint8_t m_remainingFeedbackSegments; //!< Indicate the number of remaining feedback segments for
+                                         //!< the associated HE compressed beamforming/CQI frame
+    uint8_t
+        m_firstFeedbackSegment; //!< Indicate whether it is the first or the only feedback segment
+    uint8_t m_ruStart; //!< The starting RU index for which the HE beamformer is requesting feedback
+    uint8_t m_ruEnd;   //!< The ending RU index for which the HE beamformer is requesting feedback
+    uint8_t m_soundingDialogToken;               //!< Sounding Dialog Token Number
+    uint8_t m_disallowedSubchannelBitmapPresent; //!< Whether the Disallowed Subchannel Bitmap
+                                                 //!< subfield and a reserved field of 8 bits are
+                                                 //!< present in the HE MIMO Control field
+    uint8_t m_disallowedSubchannelBitmap;        //!< Disallowed Subchannel Bitmap
+};
+
+/**
+ * \ingroup wifi
+ *
+ * Implement HE Compressed Beamforming Report field
+ */
+class HeCompressedBfReport : public Header
+{
+  public:
+    HeCompressedBfReport();
+    HeCompressedBfReport(const HeMimoControlHeader& heMimoControlHeader);
+    ~HeCompressedBfReport() override;
+
+    // Channel information
+    struct ChannelInfo
+    {
+        std::vector<uint8_t> m_stStreamSnr; //!< Average SNR of space-time streams
+        std::vector<std::vector<uint16_t>>
+            m_phi; //!< Phi angle (number of subcarriers * number of angles)
+        std::vector<std::vector<uint16_t>>
+            m_psi; //!< Psi angle (number of subcarriers * number of angles)
+    };
+
+    /**
+     * Register this type.
+     * \return The TypeId.
+     */
+    static TypeId GetTypeId();
+    TypeId GetInstanceTypeId() const override;
+    void Print(std::ostream& os) const override;
+    uint32_t GetSerializedSize() const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+
+    static std::tuple<uint8_t, uint8_t> GetAngleBits(
+        const HeMimoControlHeader& heMimoControlHeader);
+
+    /**
+     * Set neccessary parameters to build compressed beamforming report given HE MIMO Control header
+     * \param heMimoControlHeader HE MIMO Control header
+     */
+    void SetHeMimoControlHeader(const HeMimoControlHeader& heMimoControlHeader);
+
+    /**
+     * Set channel information to build compressed beamforming
+     * \param channelInfo channel information
+     */
+    void SetChannelInfo(ChannelInfo channelInfo);
+
+    /**
+     * Get channel information
+     * \return channelInfo channel information
+     */
+    ChannelInfo GetChannelInfo();
+
+    /**
+     * Get the number of columns Nc in a compressed beamforming feedback matrix
+     * \return the number of columns Nc in a compressed beamforming feedback matrix
+     */
+    uint8_t GetNc() const;
+
+    /**
+     * Get the number of rows Nr in a compressed beamforming feedback matrix
+     * \return the number of rows Nr in a compressed beamforming feedback matrix
+     */
+    uint8_t GetNr() const;
+
+    /**
+     * Get the number of subcarriers in compressed beamforming report
+     * \return the number of subcarriers
+     */
+    uint16_t GetNs() const;
+
+    /**
+     * Get the number of angles (Phi and Psi) on each subcarrier in compressed beamforming report
+     * \return the number of angles
+     */
+    uint8_t GetNa() const;
+
+    /**
+     * Get the number of bits to quantize Phi angles
+     * \return the number of bits to quantize Phi angles
+     */
+    uint8_t GetBits1() const;
+
+    /**
+     * Get the number of bits to quantize Psi angles
+     * \return the number of bits to quantize Psi angles
+     */
+    uint8_t GetBits2() const;
+
+    /**
+     * Prepare neccessary information to serialize channel information into compressed beamforming
+     * report \return the tuple containing information to serialize channel information: a vector of
+     * values arranges in order that will be serialized, a vector of bits used to quantize each
+     * value
+     */
+    std::tuple<std::vector<uint16_t>, std::vector<uint8_t>> PrepareWriteBfBuffer() const;
+
+    /**
+     * Write beamforming report information into a buffer
+     * \param values a vector of values that will be written into a buffer
+     * \param bits a vector of number of bits corresponding to each value in the "values" vector
+     *
+     * \return a buffer containing beamforming report
+     */
+    std::vector<uint8_t> WriteBfReportBuffer(std::vector<uint16_t> values,
+                                             std::vector<uint8_t> bits) const;
+
+    /**
+     * Read beamforming report information and store channel information in m_channelInfo
+     * \param buffer a vector containing channel information values
+     *
+     */
+    void ReadChannelInfoFromBuffer(std::vector<uint8_t> buffer);
+
+    /**
+     * Read beamforming report information
+     * \param buffer a vector containing beamforming report
+     * \param bits a vector of number of bits arranged in order which is used to quantize each value
+     * in the beamforming report \param idxBuffer the index of byte where to start reading the
+     * buffer
+     *
+     * \return an vector of values read from the buffer
+     */
+    std::vector<uint16_t> ReadBfReportBuffer(std::vector<uint8_t> buffer,
+                                             std::vector<uint8_t> bits,
+                                             uint16_t idxBuffer) const;
+
+    /**
+     * Generate number of angles on each subcarrier in beamforming report matrix
+     *
+     * \param nc number of columns in a compressed beamforming feedback matrix
+     * \param nr number of rows in a compressed beamforming feedback matrix
+     */
+    static uint8_t CalculateNa(uint8_t nc, uint8_t nr);
+
+    /**
+     * Generate number of subcarriers that are required for CSI feedback
+     *
+     * \param bandwidth bandwidth of the channel that are required for CSI feedback
+     * \param ng subcarrier grouping parameter (4 or 16)
+     */
+    static uint16_t GetNSubcarriers(uint8_t ruStart, uint8_t ruEnd, uint8_t ng);
+
+  private:
+    uint8_t m_nc;    //!< The number of columns Nc in a compressed beamforming feedback matrix
+    uint8_t m_nr;    //!< The number of rows Nr in a compressed beamforming feedback matrix
+    uint8_t m_na;    //!< The number of compressed angles
+    uint16_t m_ns;   //!< The number of subcarriers
+    uint8_t m_bits1; //!< The `number of bits representing angle Phi
+    uint8_t m_bits2; //!< The number of bits representing angle Psis
+    ChannelInfo m_channelInfo; //!< Channel information
+};
+
+class HeMuExclusiveBfReport : public Header
+{
+  public:
+    HeMuExclusiveBfReport();
+    HeMuExclusiveBfReport(const HeMimoControlHeader& heMimoControlHeader);
+    ~HeMuExclusiveBfReport() override;
+
+    /**
+     * Register this type.
+     * \return The TypeId.
+     */
+    static TypeId GetTypeId();
+    TypeId GetInstanceTypeId() const override;
+    void Print(std::ostream& os) const override;
+    uint32_t GetSerializedSize() const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+
+    /**
+     * Set Delta SNR information for the HE MU Exclusive beamforming report
+     * \param deltaSnr Delta SNR information
+     */
+    void SetDeltaSnr(std::vector<std::vector<uint8_t>> deltaSnr);
+
+    /**
+     * Get Delta SNR information for the HE MU Exclusive beamforming report
+     * \return deltaSnr Delta SNR information
+     */
+    std::vector<std::vector<uint8_t>> GetDeltaSnr();
+
+  private:
+    uint8_t m_nc;  //!< The number of columns Nc in a compressed beamforming feedback matrix
+    uint16_t m_ns; //!< The number of subcarriers
+    std::vector<std::vector<uint8_t>>
+        m_deltaSnr; //!< Delta SNR information for each space-time stream
 };
 
 } // namespace ns3

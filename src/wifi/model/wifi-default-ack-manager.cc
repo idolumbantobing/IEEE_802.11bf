@@ -69,7 +69,9 @@ WifiDefaultAckManager::GetTypeId()
                                           WifiAcknowledgment::DL_MU_TF_MU_BAR,
                                           "DL_MU_TF_MU_BAR",
                                           WifiAcknowledgment::DL_MU_AGGREGATE_TF,
-                                          "DL_MU_AGGREGATE_TF"))
+                                          "DL_MU_AGGREGATE_TF",
+                                          WifiAcknowledgment::NONE,
+                                          "NONE"))
             .AddAttribute("MaxBlockAckMcs",
                           "The MCS used to send a BlockAck in a TB PPDU is the minimum between "
                           "the MCS used for the PSDU sent in the preceding DL MU PPDU and the "
@@ -219,6 +221,8 @@ WifiDefaultAckManager::TryAddMpdu(Ptr<const WifiMpdu> mpdu, const WifiTxParamete
             return GetAckInfoIfTfMuBar(mpdu, txParams);
         case WifiAcknowledgment::DL_MU_AGGREGATE_TF:
             return GetAckInfoIfAggregatedMuBar(mpdu, txParams);
+        case WifiAcknowledgment::NONE:
+            return nullptr;
         default:
             NS_ABORT_MSG("Unknown DL acknowledgment method");
             return nullptr;
@@ -277,7 +281,8 @@ WifiDefaultAckManager::TryAddMpdu(Ptr<const WifiMpdu> mpdu, const WifiTxParamete
         return nullptr;
     }
 
-    if (receiver.IsGroup())
+    // attempt to modify the acknowledgment method for Wi-Fi Sensing
+    if (receiver.IsGroup() || hdr.IsCfPoll() || hdr.IsCts() || hdr.IsNdpa() || hdr.IsNdp())
     {
         NS_ABORT_MSG_IF(txParams.GetSize(receiver) > 0, "Unicast frames only can be aggregated");
         auto acknowledgment = std::make_unique<WifiNoAck>();

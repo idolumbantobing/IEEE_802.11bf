@@ -19,6 +19,8 @@
 
 #include "he-capabilities.h"
 
+#include "ns3/string.h"
+
 #include <algorithm>
 
 namespace ns3
@@ -615,6 +617,81 @@ uint32_t
 HeCapabilities::GetMaxAmpduLength() const
 {
     return std::min<uint32_t>((1UL << (20 + m_maxAmpduLengthExponent)) - 1, 6500631);
+}
+
+/*
+*************************************
+Attempt to add Channel Sounding from ns3.37
+new capabalities for HE
+*************************************
+*/
+
+void
+HeCapabilities::SetNgforSuFeedback(uint8_t ng)
+{
+    NS_ASSERT_MSG(ng == 4 || ng == 16,
+                  "Subcarrier grouping parameter Ng should be either 4 or 16.");
+    m_ngEqual16ForSuFeedbackSupport = (ng == 16);
+}
+
+uint8_t
+HeCapabilities::GetNgforSuFeedback() const
+{
+    return m_ngEqual16ForSuFeedbackSupport ? 16 : 4;
+}
+
+void
+HeCapabilities::SetNgforMuFeedback(uint8_t ng)
+{
+    NS_ASSERT_MSG(ng == 4 || ng == 16,
+                  "Subcarrier grouping parameter Ng should be either 4 or 16.");
+    m_ngEqual16ForMuFeedbackSupport = (ng == 16);
+}
+
+uint8_t
+HeCapabilities::GetNgforMuFeedback() const
+{
+    return m_ngEqual16ForMuFeedbackSupport ? 16 : 4;
+}
+
+void
+HeCapabilities::SetCodebookSizeforSu(std::string codebookSize)
+{
+    NS_ASSERT_MSG(codebookSize == "(4,2)" || codebookSize == "(6,4)",
+                  "Codebook size for SU channel sounding should be chosen from (4,2) or (6,4).");
+    m_codebookSize42SuFeedback = (codebookSize == "(4,2)");
+}
+
+std::string
+HeCapabilities::GetCodebookSizeforSu() const
+{
+    return m_codebookSize42SuFeedback ? "(4,2)" : "(6,4)";
+}
+
+void
+HeCapabilities::SetCodebookSizeforMu(std::string codebookSize)
+{
+    NS_ASSERT_MSG(codebookSize == "(7,5)" || codebookSize == "(9,7)",
+                  "Codebook size for MU channel sounding should be chosen from (7,5) or (9,7).");
+    m_codebookSize75MuFeedback = (codebookSize == "(7,5)");
+}
+
+std::string
+HeCapabilities::GetCodebookSizeforMu() const
+{
+    return m_codebookSize75MuFeedback ? "(7,5)" : "(9,7)";
+}
+
+void
+HeCapabilities::SetMaxNc(uint8_t nc)
+{
+    m_maxNc = nc;
+}
+
+uint8_t
+HeCapabilities::GetMaxNc() const
+{
+    return m_maxNc;
 }
 
 } // namespace ns3

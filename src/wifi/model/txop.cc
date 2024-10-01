@@ -20,11 +20,13 @@
 #include "txop.h"
 
 #include "channel-access-manager.h"
+#include "infrastructure-wifi-mac.h"
 #include "mac-tx-middle.h"
 #include "wifi-mac-queue-scheduler.h"
 #include "wifi-mac-queue.h"
 #include "wifi-mac-trailer.h"
 #include "wifi-mac.h"
+#include "wifi-tx-vector.h"
 
 #include "ns3/attribute-container.h"
 #include "ns3/log.h"
@@ -138,7 +140,8 @@ Txop::Txop()
 }
 
 Txop::Txop(Ptr<WifiMacQueue> queue)
-    : m_queue(queue)
+    : m_queue(queue),
+      m_currentPacket(0)
 {
     NS_LOG_FUNCTION(this);
     m_rng = CreateObject<UniformRandomVariable>();
@@ -521,20 +524,41 @@ Txop::HasFramesToTransmit(uint8_t linkId)
 }
 
 void
-Txop::Queue(Ptr<Packet> packet, const WifiMacHeader& hdr)
+Txop::Queue(Ptr<Packet> packet, const WifiMacHeader& hdr, bool IsCfPeriod)
 {
     NS_LOG_FUNCTION(this << packet << &hdr);
     // remove the priority tag attached, if any
     SocketPriorityTag priorityTag;
     packet->RemovePacketTag(priorityTag);
-    Queue(Create<WifiMpdu>(packet, hdr));
+    if (IsCfPeriod)
+    {
+        Queue(Create<WifiMpdu>(packet, hdr), true);
+    }
+    else
+    {
+        Queue(Create<WifiMpdu>(packet, hdr));
+    }
 }
 
 void
-Txop::Queue(Ptr<WifiMpdu> mpdu)
+Txop::Queue(Ptr<WifiMpdu> mpdu, bool IsCfPeriod)
 {
     NS_LOG_FUNCTION(this << *mpdu);
+    NS_LOG_INFO("Queueing " << *mpdu << " for transmission");
+    m_currentHdr = mpdu->GetHeader();
     const auto linkIds = m_mac->GetMacQueueScheduler()->GetLinkIds(m_queue->GetAc(), mpdu);
+
+    if (IsCfPeriod)
+    {
+        // This is a PCF mechanism, whereas the access is granted immediately, since the AP already
+        // got the channel
+        NS_ASSERT(GetAccessStatus(0U) > REQUESTED);
+        // std::cout << GetAccessStatus(0U) << std::endl;
+        m_queue->Enqueue(mpdu);
+        NotifyAccessGranted(0U);
+        return;
+    }
+
     for (const auto linkId : linkIds)
     {
         if (m_mac->GetChannelAccessManager(linkId)->NeedBackoffUponAccess(this))
@@ -558,13 +582,35 @@ Txop::AssignStreams(int64_t stream)
 }
 
 void
-Txop::StartAccessIfNeeded(uint8_t linkId)
+Txop::StartAccessIfNeeded(uint8_t linkId, bool IsCfPeriod)
 {
     NS_LOG_FUNCTION(this << +linkId);
-    if (HasFramesToTransmit(linkId) && GetLink(linkId).access == NOT_REQUESTED)
+
+    if (IsCfPeriod && GetLink(linkId).access == NOT_REQUESTED)
     {
-        m_mac->GetChannelAccessManager(linkId)->RequestAccess(this);
+        m_mac->GetChannelAccessManager(linkId)->RequestAccess(this, true);
     }
+    else
+    {
+        if (HasFramesToTransmit(linkId) && GetLink(linkId).access == NOT_REQUESTED)
+        {
+            m_mac->GetChannelAccessManager(linkId)->RequestAccess(this);
+        }
+    }
+
+    // if (HasFramesToTransmit(linkId) && GetLink(linkId).access == NOT_REQUESTED)
+    // {
+    //     if (IsCfPeriod)
+    //     {
+    //         // NS_LOG_INFO("Txop line 601 : Requesting Access for PCF");
+    //         m_mac->GetChannelAccessManager(linkId)->RequestAccess(this, true);
+    //     }
+    //     else
+    //     {
+    //         // NS_LOG_INFO("Txop line 601 : Requesting Access for DCF");
+    //         m_mac->GetChannelAccessManager(linkId)->RequestAccess(this);
+    //     }
+    // }
 }
 
 void
@@ -625,8 +671,16 @@ Txop::GenerateBackoff(uint8_t linkId)
 {
     NS_LOG_FUNCTION(this << +linkId);
     uint32_t backoff = m_rng->GetInteger(0, GetCw(linkId));
+    // if (m_inf && m_inf->GetPcfSupported() && lastCw == GetMaxCw(linkId))
+    // {
+    //     backoff = m_rng->GetInteger((uint32_t)((double)GetCw(linkId)*0.5), GetCw(linkId));
+    // }else
+    // {
+    //     backoff = m_rng->GetInteger(0, GetCw(linkId));
+    // }
     m_backoffTrace(backoff, linkId);
     StartBackoffNow(backoff, linkId);
+    lastCw = GetCw(linkId);
 }
 
 void
@@ -664,5 +718,317 @@ Txop::IsQosTxop() const
 {
     return false;
 }
+
+/*
+   *************************************
+   Attempt to add PCF from ns3.33
+   Public Functions and Attributes for Txop
+   *************************************
+*/
+
+void
+Txop::SendCfFrame(WifiMacType frameType, Mac48Address addr, uint8_t linkId)
+{
+    NS_LOG_FUNCTION(this << frameType << addr);
+    if (!(m_inf->IsCfPeriod(linkId)))
+    {
+        NS_LOG_DEBUG("Not in CF period");
+        return;
+    }
+
+    WifiMacHeader pollingFrame;
+    Ptr<Packet> packetPollingFrame = Create<Packet>();
+    pollingFrame.SetType(WIFI_MAC_QOSDATA_CFPOLL);
+    pollingFrame.SetNoRetry();
+    pollingFrame.SetAddr1(addr);
+    pollingFrame.SetAddr2(m_inf->GetAddress());
+    pollingFrame.SetDsNotTo();
+    pollingFrame.SetDsNotFrom();
+    pollingFrame.SetQosAckPolicy(ns3::WifiMacHeader::QosAckPolicy::NO_ACK);
+    pollingFrame.SetQosTid(0);
+
+    m_currentPacket = packetPollingFrame;
+    m_currentHdr = pollingFrame;
+    // m_currentHdr.SetType(frameType);
+
+    // m_currentHdr.SetAddr1(addr);
+    // m_currentHdr.SetAddr2(m_inf->GetAddress());
+
+    // if (frameType == WIFI_MAC_DATA_NULL)
+    // {
+    //     m_currentHdr.SetAddr3(m_inf->GetBssid(linkId));
+    //     m_currentHdr.SetDsTo();
+    //     m_currentHdr.SetDsNotFrom();
+    // }
+    // else
+    // {
+    //     m_currentHdr.SetAddr3(m_inf->GetAddress());
+    //     m_currentHdr.SetDsNotTo();
+    //     m_currentHdr.SetDsFrom();
+    // }
+    Queue(Create<WifiMpdu>(m_currentPacket, m_currentHdr), true);
+}
+
+void
+Txop::SetInfMac(const Ptr<InfrastructureWifiMac> inf)
+{
+    NS_LOG_FUNCTION(this << inf);
+    m_inf = inf;
+}
+
+void
+Txop::NotifyAccessGranted(uint8_t linkId)
+{
+    NS_LOG_FUNCTION(this);
+    NS_ASSERT(this->GetAccessStatus(linkId));
+    GetLink(linkId).access = GRANTED;
+
+    m_mac->GetFrameExchangeManager()->StartTransmission(
+        this,
+        m_mac->GetWifiPhy(linkId)->GetChannelWidth());
+}
+
+void
+Txop::MissedCts(uint8_t linkId)
+{
+    NS_LOG_FUNCTION(this);
+    NS_LOG_DEBUG("missed cts");
+    // Note : Need Data and RTS retransmission is same on Wifi Remote Station Manager level
+    if (!m_mac->GetWifiRemoteStationManager(linkId)->NeedRetransmission(
+            Create<WifiMpdu>(m_currentPacket, m_currentHdr)))
+    {
+        NS_LOG_DEBUG("Cts Fail");
+        m_mac->GetWifiRemoteStationManager(linkId)->ReportFinalRtsFailed(m_currentHdr);
+        if (!m_txFailedCallback.IsNull())
+        {
+            ns3::WifiMacDropReason reason = ns3::WifiMacDropReason::WIFI_MAC_DROP_EXPIRED_LIFETIME;
+            ns3::Ptr<const ns3::WifiMpdu> mpdu = Create<WifiMpdu>(m_currentPacket, m_currentHdr);
+            m_txFailedCallback(reason, mpdu);
+        }
+        // to reset the Txop.
+        m_currentPacket = 0;
+        ResetCw(linkId);
+        m_cwTrace(GetCw(linkId), linkId);
+    }
+    else
+    {
+        UpdateFailedCw(linkId);
+        m_cwTrace(GetCw(linkId), linkId);
+    }
+    GenerateBackoff(linkId);
+    RestartAccessIfNeeded(linkId);
+}
+
+void
+Txop::MissedAck(uint8_t linkId)
+{
+    NS_LOG_FUNCTION(this);
+    NS_LOG_DEBUG("missed ack");
+    if (!m_mac->GetWifiRemoteStationManager(linkId)->NeedRetransmission(
+            Create<WifiMpdu>(m_currentPacket, m_currentHdr)))
+    {
+        NS_LOG_DEBUG("Ack Fail");
+        m_mac->GetWifiRemoteStationManager(linkId)->ReportFinalDataFailed(
+            Create<WifiMpdu>(m_currentPacket, m_currentHdr));
+        if (!m_txFailedCallback.IsNull())
+        {
+            ns3::WifiMacDropReason reason = ns3::WifiMacDropReason::WIFI_MAC_DROP_EXPIRED_LIFETIME;
+            ns3::Ptr<const ns3::WifiMpdu> mpdu = Create<WifiMpdu>(m_currentPacket, m_currentHdr);
+            m_txFailedCallback(reason, mpdu);
+        }
+        // to reset the Txop.
+        m_currentPacket = 0;
+        ResetCw(linkId);
+        m_cwTrace(GetCw(linkId), linkId);
+    }
+    else
+    {
+        NS_LOG_DEBUG("Retransmit");
+        m_mac->GetWifiRemoteStationManager(linkId)->ReportDataFailed(
+            Create<WifiMpdu>(m_currentPacket, m_currentHdr));
+        m_currentHdr.SetRetry();
+        UpdateFailedCw(linkId);
+        m_cwTrace(GetCw(linkId), linkId);
+    }
+    GenerateBackoff(linkId);
+    RestartAccessIfNeeded(linkId);
+}
+
+void
+Txop::GotCfEnd(uint8_t linkId)
+{
+    NS_LOG_FUNCTION(this);
+    if (m_currentPacket != 0)
+    {
+        RestartAccessIfNeeded(linkId);
+    }
+    else
+    {
+        StartAccessIfNeeded(linkId);
+    }
+}
+
+void
+Txop::MissedCfPollResponse(bool expectedCfAck, uint8_t linkId)
+{
+    NS_LOG_FUNCTION(this);
+    NS_LOG_DEBUG("missed response to CF-POLL");
+    if (expectedCfAck)
+    {
+        if (!m_mac->GetWifiRemoteStationManager(linkId)->NeedRetransmission(
+                Create<WifiMpdu>(m_currentPacket, m_currentHdr)))
+        {
+            NS_LOG_DEBUG("Ack Fail");
+            m_mac->GetWifiRemoteStationManager(linkId)->ReportFinalDataFailed(
+                Create<WifiMpdu>(m_currentPacket, m_currentHdr));
+            m_currentPacket = 0;
+        }
+        else
+        {
+            NS_LOG_DEBUG("Retransmit");
+            m_currentHdr.SetRetry();
+        }
+    }
+    if (!m_txFailedCallback.IsNull())
+    {
+        ns3::WifiMacDropReason reason = ns3::WifiMacDropReason::WIFI_MAC_DROP_EXPIRED_LIFETIME;
+        ns3::Ptr<const ns3::WifiMpdu> mpdu = Create<WifiMpdu>(m_currentPacket, m_currentHdr);
+        m_txFailedCallback(reason, mpdu);
+    }
+}
+
+void
+Txop::EndTxNoAck(uint8_t linkId, Ptr<const WifiMpdu> mpdu, bool IsCfPeriod)
+{
+    NS_LOG_FUNCTION(this);
+    ResetCw(linkId);
+    m_cwTrace(GetCw(linkId), linkId);
+}
+
+void
+Txop::Cancel(void)
+{
+    NS_LOG_FUNCTION(this);
+    NS_LOG_DEBUG("transmission cancelled");
+}
+
+void
+Txop::StartNextPacket(void)
+{
+    NS_LOG_WARN("StartNext should not be called for non QoS!");
+}
+
+void
+Txop::GotBlockAck(const CtrlBAckResponseHeader* blockAck,
+                  Mac48Address recipient,
+                  double rxSnr,
+                  double dataSnr,
+                  WifiTxVector dataTxVector)
+{
+    NS_LOG_WARN("GotBlockAck should not be called for non QoS!");
+}
+
+void
+Txop::MissedBlockAck(uint8_t nMpdus)
+{
+    NS_LOG_WARN("MissedBlockAck should not be called for non QoS!");
+}
+
+Time
+Txop::GetTxopRemaining(void) const
+{
+    NS_LOG_WARN("GetTxopRemaining should not be called for non QoS!");
+    return Seconds(0);
+}
+
+void
+Txop::TerminateTxop(void)
+{
+    NS_LOG_WARN("TerminateTxop should not be called for non QoS!");
+}
+
+bool
+Txop::IsAccessRequested(uint8_t linkId) const
+{
+    return GetLink(linkId).access;
+}
+
+void
+Txop::SetTxOkCallback(TxOk callback)
+{
+    NS_LOG_FUNCTION(this << &callback);
+    m_txOkCallback = callback;
+}
+
+void
+Txop::SetTxFailedCallback(TxFailed callback)
+{
+    NS_LOG_FUNCTION(this << &callback);
+    m_txFailedCallback = callback;
+}
+
+void
+Txop::SetTxDroppedCallback(TxDropped callback)
+{
+    NS_LOG_FUNCTION(this << &callback);
+    m_txDroppedCallback = callback;
+    m_queue->TraceConnectWithoutContext("Drop", MakeCallback(&Txop::TxDroppedPacket, this));
+}
+
+void
+Txop::NotifyChannelReleasedForPCF(uint8_t linkId, bool IsBfSensing, Time duration)
+{
+    NS_LOG_FUNCTION(this << +linkId);
+    GetLink(linkId).access = NOT_REQUESTED;
+    GenerateBackoff(linkId);
+}
+
+Time
+Txop::GetPcfRemainingDuration(uint8_t linkId)
+{
+    return m_inf->GetRemainingCfpDuration();
+}
+
+/*
+   *************************************
+   Attempt to add PCF from ns3.33
+   Protected Functions and Attributes for Txop
+   *************************************
+*/
+
+void
+Txop::RestartAccessIfNeeded(uint8_t linkId)
+{
+    NS_LOG_FUNCTION(this);
+    if ((m_currentPacket != 0 || !m_queue->IsEmpty()) && !IsAccessRequested(linkId) &&
+        !m_inf->IsCfPeriod(linkId))
+    {
+        m_mac->GetChannelAccessManager(linkId)->RequestAccess(this);
+    }
+}
+
+void
+Txop::TxDroppedPacket(Ptr<const WifiMpdu> item)
+{
+    if (!m_txDroppedCallback.IsNull())
+    {
+        m_txDroppedCallback(item->GetPacket());
+    }
+}
+
+bool
+Txop::NeedFragmentation(uint8_t linkId) const
+{
+    NS_LOG_FUNCTION(this);
+    return m_mac->GetWifiRemoteStationManager(linkId)->NeedFragmentation(
+        Create<WifiMpdu>(m_currentPacket, m_currentHdr));
+}
+
+/*
+   *************************************
+   Attempt to add PCF from ns3.33
+   Private Functions and Attributes for Txop
+   *************************************
+*/
 
 } // namespace ns3

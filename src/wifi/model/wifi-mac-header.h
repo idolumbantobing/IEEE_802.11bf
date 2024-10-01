@@ -45,6 +45,7 @@ enum WifiMacType
     WIFI_MAC_CTL_BACKRESP,
     WIFI_MAC_CTL_END,
     WIFI_MAC_CTL_END_ACK,
+    WIFI_MAC_CTL_NDPA,
 
     WIFI_MAC_CTL_DMG_POLL,
     WIFI_MAC_CTL_DMG_SPR,
@@ -635,6 +636,26 @@ class WifiMacHeader : public Header
      * \param [in] header The header
      */
     typedef void (*TracedCallback)(const WifiMacHeader& header);
+
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    Public Functions for Wifi Mac Header
+    *************************************
+    */
+
+    /**
+     * Return true if the header is an NDPA header.
+     *
+     * \return true if the header is an NDPA header, false otherwise
+     */
+    bool IsNdpa(void) const;
+    /**
+     * Return true if the header is an NDP header.
+     *
+     * \return true if the header is an NDP header, false otherwise
+     */
+    bool IsNdp(void) const;
 
   protected:
     /**

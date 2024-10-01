@@ -232,6 +232,18 @@ MultiUserScheduler::NotifyAccessGranted(Ptr<QosTxop> edca,
     {
         m_lastTxInfo[linkId].ulInfo = ComputeUlMuInfo();
         CheckTriggerFrame();
+    }else if (txFormat == BF_POLL_DL_TX)
+    {
+        // attempt to modify MU-OFDMA for Polling Phase 11bf
+        m_lastTxInfo[linkId].pollmuInfo = ComputePollMuInfo();
+    }else if (txFormat == BF_NDPA_SOUNDING_TX)
+    {
+        // attempt to modify MU-OFDMA for NDPA Sounding Phase 11bf
+        CheckTriggerFrame();
+    }else if (txFormat == BF_NDPA_SOUNDING_TX_SU)
+    {
+        // attempt to modify SU for NDPA Sounding Phase 11bf
+        CheckTriggerFrame();
     }
 
     if (txFormat != NO_TX)
@@ -275,6 +287,28 @@ MultiUserScheduler::GetUlMuInfo(uint8_t linkId)
                     "Next transmission is not UL MU");
 
     return m_lastTxInfo[linkId].ulInfo;
+}
+
+// Attempt to modify MU-MIMO for 11bf Polling Phase
+MultiUserScheduler::PollingMuInfo&
+MultiUserScheduler::GetPollingMuInfo(uint8_t linkId)
+{
+    NS_ABORT_MSG_IF(m_lastTxInfo[linkId].lastTxFormat != BF_POLL_DL_TX,
+                    "Next transmission is not 11bf Polling Phase MU");
+
+#ifdef NS3_BUILD_PROFILE_DEBUG
+    // check that all the addressed stations support HE
+    for (auto& psdu : m_lastTxInfo[linkId].pollmuInfo.psduMap)
+    {
+        auto receiver = psdu.second->GetAddr1();
+        auto linkId = m_apMac->IsAssociated(receiver);
+        NS_ABORT_MSG_IF(!linkId, "Station " << receiver << " should be associated");
+        NS_ABORT_MSG_IF(!GetWifiRemoteStationManager(*linkId)->GetHeSupported(receiver),
+                        "Station " << psdu.second->GetAddr1() << " does not support HE");
+    }
+#endif
+
+    return m_lastTxInfo[linkId].pollmuInfo;
 }
 
 Ptr<WifiMpdu>
@@ -351,6 +385,11 @@ MultiUserScheduler::GetMaxSizeOfQosNullAmpdu(const CtrlTriggerHeader& trigger) c
     }
 
     return maxSize;
+}
+
+void MultiUserScheduler::SensingTimeout()
+{
+    m_lastTxInfo[0U].lastTxFormat = NO_TX;
 }
 
 } // namespace ns3

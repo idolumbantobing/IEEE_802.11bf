@@ -219,6 +219,67 @@ class HeCapabilities : public WifiInformationElement
      */
     uint32_t GetMaxAmpduLength() const;
 
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    new capabalities for HE
+    *************************************
+    */
+
+    // Channel sounding parameters
+    /**
+     * Set Ng for SU channel sounding feedback
+     *
+     * \param ng Ng for SU channel sounding feedback
+     */
+    void SetNgforSuFeedback(uint8_t ng);
+    /**
+     * Return Ng for SU channel sounding feedback
+     *
+     * \return Ng for SU channel sounding feedback
+     */
+    uint8_t GetNgforSuFeedback() const;
+    /**
+     * Set Ng for MU channel sounding feedback
+     *
+     * \param ng Ng for MU channel sounding feedback
+     */
+    void SetNgforMuFeedback(uint8_t ng);
+    /**
+     * Return Ng for MU channel sounding feedback
+     *
+     * \return Ng for MU channel sounding feedback
+     */
+    uint8_t GetNgforMuFeedback() const;
+    /**
+     * \param codebookSize codebook size for SU beamforming report
+     */
+    void SetCodebookSizeforSu(std::string codebookSize);
+    /**
+     * \return codebook size for SU beamforming report
+     */
+    std::string GetCodebookSizeforSu() const;
+    /**
+     * \param codebookSize codebook size for MU beamforming report
+     */
+    void SetCodebookSizeforMu(std::string codebookSize);
+    /**
+     * \return codebook size for MU beamforming report
+     */
+    std::string GetCodebookSizeforMu() const;
+    /**
+     * Set to the maximum supported Nc for an HE compressed beamforming/CQI report minus 1.
+     *
+     * \param nc max Nc for beamforming report
+     */
+    void SetMaxNc(uint8_t nc);
+    /**
+     * Return max Nc for beamforming report
+     *
+     * \return max Nc for beamforming report
+     */
+    uint8_t GetMaxNc() const;
+
   private:
     uint16_t GetInformationFieldSize() const override;
     void SerializeInformationField(Buffer::Iterator start) const override;

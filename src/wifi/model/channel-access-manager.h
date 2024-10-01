@@ -125,7 +125,7 @@ class ChannelAccessManager : public Object
      * timer and, invoking FrameExchangeManager::StartTransmission when the access
      * is granted if it ever gets granted.
      */
-    void RequestAccess(Ptr<Txop> txop);
+    void RequestAccess(Ptr<Txop> txop, bool IsCfPeriod = false);
 
     /**
      * Access will never be granted to the medium _before_
@@ -306,9 +306,34 @@ class ChannelAccessManager : public Object
                                   const WifiPhyOperatingChannel& channel,
                                   uint8_t linkId);
 
+    /*
+    *************************************
+    Attempt to add IEEE 802.11bf support
+    Public Functions and Attributes for Channel Access Manager
+    *************************************
+    */
+
+    /**
+     * Return the most recent time.
+     *
+     * \param list the initializer list including the times to compare
+     *
+     * \return the most recent time
+     */
+    Time MostRecent(std::initializer_list<Time> list) const;
+    bool m_pcfSupported; //!< whether PCF is supported
+    void setPcfSupported(bool pcfSupported);
+
   protected:
     void DoInitialize() override;
     void DoDispose() override;
+
+    /*
+    *************************************
+    Attempt to add IEEE 802.11bf support
+    Protected Functions and Attributes for Channel Access Manager
+    *************************************
+    */
 
   private:
     /**
@@ -440,6 +465,26 @@ class ChannelAccessManager : public Object
     Ptr<WifiPhy> m_phy;                    //!< pointer to the unique active PHY
     Ptr<FrameExchangeManager> m_feManager; //!< pointer to the Frame Exchange Manager
     uint8_t m_linkId;                      //!< the ID of the link this object is associated with
+
+    /*
+    *************************************
+    Attempt to add IEEE 802.11bf support
+    Private Functions and Attributes for Channel Access Manager
+    *************************************
+    */
+    /**
+     * Grant access to Txop using PCF preemption
+     *
+     * \param txop the Txop
+     */
+    void DoGrantPcfAccess(Ptr<Txop> txop);
+    /**
+     * Start NAV with the given duration.
+     *
+     * \param duration the duration
+     * \return true if NAV is reset
+     */
+    bool DoNavStartNowPCF(Time duration);
 };
 
 } // namespace ns3

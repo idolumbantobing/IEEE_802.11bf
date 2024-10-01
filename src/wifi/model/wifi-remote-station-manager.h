@@ -1086,6 +1086,30 @@ class WifiRemoteStationManager : public Object
      */
     Ptr<WifiMac> GetMac() const;
 
+    /*
+    *************************************
+    Attempt to add PCF from ns3.33
+    Public methods for WiFi remote station manager
+    *************************************
+    */
+    /**
+     * Enable or disable PCF capability support.
+     *
+     * \param enable enable or disable PCF capability support
+     */
+    void SetPcfSupported(bool enable);
+    /**
+     * Return whether the device has PCF capability support enabled.
+     *
+     * \return true if PCF capability support is enabled, false otherwise
+     */
+    bool GetPcfSupported(void) const;
+    /**
+     * Typically called to update the fragmentation threshold at the start of a new transmission.
+     * This avoid that the fragmentation threshold gets changed during a transmission (see bug 730).
+     */
+    // void UpdateFragmentationThreshold(void);
+
   protected:
     void DoDispose() override;
     /**
@@ -1509,6 +1533,14 @@ class WifiRemoteStationManager : public Object
                                         //!< are detected
     ProtectionMode
         m_htProtectionMode; //!< Protection mode for HT stations when non-HT stations are detected
+
+    /*
+    *************************************
+    Attempt to add PCF from ns3.33
+    Instances for WiFi remote station manager
+    *************************************
+    */
+    bool m_pcfSupported; //!< Flag if PCF capability is supported
 
     std::array<uint32_t, AC_BE_NQOS> m_ssrc; //!< short retry count per AC
     std::array<uint32_t, AC_BE_NQOS> m_slrc; //!< long retry count per AC

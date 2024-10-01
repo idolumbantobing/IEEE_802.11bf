@@ -65,6 +65,23 @@ class MacRxMiddle : public SimpleRefCount<MacRxMiddle>
      */
     void Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
 
+    /*
+      *************************************
+      Attempt to add PCF from ns3.33
+      Public Functions and Attributes for MAC RX middle
+      *************************************
+    */
+    /**
+     * typedef for callback
+     */
+    typedef Callback<void, uint8_t /* link ID */> PcfCallback;
+    /**
+     * Set a callback to trigger the next PCF frame.
+     *
+     * \param callback the callback to set
+     */
+    void SetPcfCallback(PcfCallback callback);
+
   private:
     /// allow MacRxMiddleTest associated class access
     friend class MacRxMiddleTest;
@@ -130,6 +147,14 @@ class MacRxMiddle : public SimpleRefCount<MacRxMiddle>
     Originators m_originatorStatus;       ///< originator status
     QosOriginators m_qosOriginatorStatus; ///< QOS originator status
     ForwardUpCallback m_callback;         ///< forward up callback
+
+    /*
+      *************************************
+      Attempt to add PCF from ns3.33
+      Private Functions and Attributes for MAC RX middle
+      *************************************
+    */
+    PcfCallback m_pcfCallback; //!< PCF callback
 };
 
 } // namespace ns3

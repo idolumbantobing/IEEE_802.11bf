@@ -198,4 +198,26 @@ WifiTxTimer::FeedTraceSource(WifiPsduMap* psduMap, std::size_t nTotalStations)
     }
 }
 
+/*
+*************************************
+Attempt to add Channel Sounding from ns3.37
+new public functions for tx timer
+*************************************
+*/
+
+void
+WifiTxTimer::SetBfReportTimeoutCallback(BfReportTimeout callback) const
+{
+    m_bfReportTimeoutCallback = callback;
+}
+
+void
+WifiTxTimer::FeedTraceSource(void)
+{
+    if (!m_bfReportTimeoutCallback.IsNull())
+    {
+        m_bfReportTimeoutCallback(m_reason);
+    }
+}
+
 } // namespace ns3

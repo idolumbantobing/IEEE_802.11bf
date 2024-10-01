@@ -154,6 +154,9 @@ set(source_files
     model/yans-error-rate-model.cc
     model/yans-wifi-channel.cc
     model/yans-wifi-phy.cc
+    model/cf-parameter-set.cc
+    model/infrastructure-wifi-mac.cc
+    model/he/channel-sounding.cc
 )
 
 set(header_files
@@ -313,6 +316,9 @@ set(header_files
     model/yans-error-rate-model.h
     model/yans-wifi-channel.h
     model/yans-wifi-phy.h
+    model/cf-parameter-set.h
+    model/infrastructure-wifi-mac.h
+    model/he/channel-sounding.h
 )
 
 build_lib(

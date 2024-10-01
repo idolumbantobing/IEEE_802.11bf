@@ -22,6 +22,7 @@
 #include "he-configuration.h"
 #include "he-phy.h"
 #include "multi-user-scheduler.h"
+#include "rr-multi-user-scheduler.h"
 
 #include "ns3/abort.h"
 #include "ns3/ap-wifi-mac.h"
@@ -30,6 +31,7 @@
 #include "ns3/recipient-block-ack-agreement.h"
 #include "ns3/snr-tag.h"
 #include "ns3/sta-wifi-mac.h"
+#include "ns3/string.h"
 #include "ns3/wifi-mac-queue.h"
 #include "ns3/wifi-mac-trailer.h"
 
@@ -65,10 +67,24 @@ IsTrigger(const WifiConstPsduMap& psduMap)
 TypeId
 HeFrameExchangeManager::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::HeFrameExchangeManager")
-                            .SetParent<VhtFrameExchangeManager>()
-                            .AddConstructor<HeFrameExchangeManager>()
-                            .SetGroupName("Wifi");
+    static TypeId tid =
+        TypeId("ns3::HeFrameExchangeManager")
+            .SetParent<VhtFrameExchangeManager>()
+            .AddConstructor<HeFrameExchangeManager>()
+            .SetGroupName("Wifi")
+            // attempt to add channel sounding from ns3.37 : add new attributes
+            .AddAttribute("PrintChannelSoundingDuration",
+                          "If enabled, the duration of channel sounding process will be printed.",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&HeFrameExchangeManager::m_csDurationOutput),
+                          MakeBooleanChecker())
+            .AddAttribute(
+                "ChannelSoundingWifiMode",
+                "Wifi mode used for beamforming report feedback (If set as '0', wifi mode is "
+                "automatically selected as the same mode as in data transmission)",
+                StringValue("0"),
+                MakeStringAccessor(&HeFrameExchangeManager::m_csMode),
+                MakeStringChecker());
     return tid;
 }
 
@@ -113,6 +129,19 @@ HeFrameExchangeManager::SetWifiMac(const Ptr<WifiMac> mac)
     m_apMac = DynamicCast<ApWifiMac>(mac);
     m_staMac = DynamicCast<StaWifiMac>(mac);
     VhtFrameExchangeManager::SetWifiMac(mac);
+
+    // attempt to add channel sounding from ns3.37 : create a new instance of CsBeamformer and
+    // CsBeamformee
+    if (m_apMac != nullptr)
+    {
+        m_csBeamformer = Create<CsBeamformer>();
+        m_csBeamformee = nullptr;
+    }
+    if (m_staMac != nullptr)
+    {
+        m_csBeamformee = Create<CsBeamformee>();
+        m_csBeamformer = nullptr;
+    }
 }
 
 void
@@ -134,12 +163,23 @@ HeFrameExchangeManager::DoDispose()
     m_txParams.Clear();
     m_muScheduler = nullptr;
     m_multiStaBaEvent.Cancel();
+
+    // attempt to add channel sounding from ns3.37 : dispose the instances of CsBeamformer and
+    // CsBeamformee
+    m_csBeamformer = nullptr;
+    m_csBeamformee = nullptr;
+
     VhtFrameExchangeManager::DoDispose();
 }
 
 void
 HeFrameExchangeManager::SetMultiUserScheduler(const Ptr<MultiUserScheduler> muScheduler)
 {
+    /*
+    This function is called by WifiMacHelper. It should install the scheduler corresponding to the
+    setup. In our case we install the RRMultiUserScheduler.
+    */
+    NS_LOG_FUNCTION(this << muScheduler);
     NS_ASSERT(m_mac);
     NS_ABORT_MSG_IF(!m_apMac, "A Multi-User Scheduler can only be aggregated to an AP");
     NS_ABORT_MSG_IF(!m_apMac->GetHeConfiguration(),
@@ -151,9 +191,11 @@ bool
 HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime, bool initialFrame)
 {
     NS_LOG_FUNCTION(this << edca << availableTime << initialFrame);
-
     MultiUserScheduler::TxFormat txFormat = MultiUserScheduler::SU_TX;
     Ptr<const WifiMpdu> mpdu;
+    Ptr<WifiMpdu> mpdu_test = edca->GetWifiMacQueue()->Peek(m_linkId);
+    mpdu = edca->PeekNextMpdu(m_linkId);
+    m_psduMap.clear();
 
     /*
      * We consult the Multi-user Scheduler (if available) to know the type of transmission to make
@@ -175,14 +217,76 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
                                                       m_allowedWidth,
                                                       m_linkId);
     }
+    // else if (m_muScheduler && mpdu_test && !mpdu_test->GetHeader().IsCfEnd())
+    else if (m_muScheduler && mpdu_test && (mpdu_test->GetHeader().IsCfPoll()))
+    {
+        if (m_apMac)
+        {
+            if (m_apMac->GetPcfSupported())
+            {
+                txFormat = m_muScheduler->NotifyAccessGranted(edca,
+                                                              availableTime,
+                                                              initialFrame,
+                                                              m_allowedWidth,
+                                                              m_linkId);
+                // txFormat = m_muScheduler->NotifyAccessGranted(edca,
+                //                                               m_apMac->GetRemainingCfpDuration(),
+                //                                               initialFrame,
+                //                                               m_allowedWidth,
+                //                                               m_linkId);
+            }
+        }
+        else if (m_staMac)
+        {
+            if (m_staMac->GetPcfSupported())
+            {
+                txFormat = m_muScheduler->NotifyAccessGranted(edca,
+                                                              availableTime,
+                                                              initialFrame,
+                                                              m_allowedWidth,
+                                                              m_linkId);
+                // txFormat = m_muScheduler->NotifyAccessGranted(edca,
+                //                                               m_staMac->GetRemainingCfpDuration(),
+                //                                               initialFrame,
+                //                                               m_allowedWidth,
+                //                                               m_linkId);
+            }
+        }
+        // Ptr<WifiMpdu> mpdu_test = edca->GetWifiMacQueue()->Peek(m_linkId);
+        // std::cout << "mpdu_test->GetHeader(): " << mpdu_test->GetHeader() << "\n";
+        // if (!mpdu_test->GetHeader().IsCfEnd())
+        // {
+        //     txFormat = m_muScheduler->NotifyAccessGranted(edca,
+        //                                                   availableTime,
+        //                                                   initialFrame,
+        //                                                   m_allowedWidth,
+        //                                                   m_linkId);
+        // }
+    }
 
     if (txFormat == MultiUserScheduler::SU_TX)
     {
+        // NS_LOG_INFO("HeFrameExchangeManager::StartFrameExchange line 235 : SU_TX");
+        if (m_apMac && mpdu_test)
+        {
+            if (mpdu_test->GetHeader().IsCts() && m_apMac->GetPcfSupported())
+            {
+                return FrameExchangeManager::StartTransmission(edca, m_phy->GetPhyBand());
+            }
+        }
+
+        if (m_staMac && m_staMac->IsAssociated() && mpdu && mpdu->GetHeader().IsAssocReq() &&
+            mpdu->GetHeader().IsReassocReq())
+        {
+            return false;
+        }
+
         return VhtFrameExchangeManager::StartFrameExchange(edca, availableTime, initialFrame);
     }
 
     if (txFormat == MultiUserScheduler::DL_MU_TX)
     {
+        NS_LOG_INFO("HeFrameExchangeManager::StartFrameExchange line 255 : DL_MU_TX");
         if (m_muScheduler->GetDlMuInfo(m_linkId).psduMap.empty())
         {
             NS_LOG_DEBUG(
@@ -197,6 +301,7 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
 
     if (txFormat == MultiUserScheduler::UL_MU_TX)
     {
+        NS_LOG_INFO("HeFrameExchangeManager::StartFrameExchange line 255 : UL_MU_TX");
         auto packet = Create<Packet>();
         packet->AddHeader(m_muScheduler->GetUlMuInfo(m_linkId).trigger);
         auto trigger = Create<WifiMpdu>(packet, m_muScheduler->GetUlMuInfo(m_linkId).macHdr);
@@ -205,6 +310,84 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
                 {SU_STA_ID,
                  GetWifiPsdu(trigger, m_muScheduler->GetUlMuInfo(m_linkId).txParams.m_txVector)}},
             m_muScheduler->GetUlMuInfo(m_linkId).txParams);
+        return true;
+    }
+
+    // Attempt to modify the MU-OFDMA for IEEE 802.11bf polling phase
+    if (txFormat == MultiUserScheduler::BF_POLL_DL_TX)
+    {
+        NS_LOG_INFO("HeFrameExchangeManager::StartFrameExchange line 255 : BF_POLL_DL_TX");
+        if (m_muScheduler->GetPollingMuInfo(m_linkId).psduMap.empty())
+        {
+            NS_LOG_DEBUG(
+                "The Multi-user Scheduler returned DL_MU_TX with empty psduMap, do not transmit");
+            return false;
+        }
+        m_txParams = std::move(m_muScheduler->GetPollingMuInfo(m_linkId).txParams);
+        m_psduMap = std::move(m_muScheduler->GetPollingMuInfo(m_linkId).psduMap);
+        SendPsduMap();
+
+        Time delay = m_txParams.m_txDuration;
+        WifiConstPsduMap psduMap;
+        for (const auto& psdu : m_psduMap)
+        {
+            psduMap.emplace(psdu.first, psdu.second);
+        }
+        delay = m_phy->CalculateTxDuration(psduMap, m_txParams.m_txVector, m_phy->GetPhyBand());
+
+        m_psduMap.clear();
+        auto packet = Create<Packet>();
+        packet->AddHeader(m_muScheduler->GetPollingMuInfo(m_linkId).triggerUlPoll);
+        auto trigger =
+            Create<WifiMpdu>(packet, m_muScheduler->GetPollingMuInfo(m_linkId).macHdrTriggerUlPoll);
+        trigger->GetHeader().SetQosTid(wifiAcList.at(m_edca->GetAccessCategory()).GetHighTid());
+        Ptr<WifiPsdu> psdu = Create<WifiPsdu>(trigger, true);
+        m_txParams = std::move(m_muScheduler->GetPollingMuInfo(m_linkId).txParamsTriggerUlPoll);
+        m_psduMap = std::move(WifiPsduMap{
+            {SU_STA_ID,
+             GetWifiPsdu(
+                 trigger,
+                 m_muScheduler->GetPollingMuInfo(m_linkId).txParamsTriggerUlPoll.m_txVector)}});
+
+        delay += m_apMac->GetWifiPhy()->GetSifs();
+        Simulator::Schedule(delay,
+                            &HeFrameExchangeManager::SendPsduMapWithProtection,
+                            this,
+                            m_psduMap,
+                            m_txParams);
+
+        // Simulator::Schedule(m_apMac->GetCfpMaxDuration(),
+        //                     &HeFrameExchangeManager::resetSensingTimeout,
+        //                     this);
+        m_psduMap.clear();
+        return true;
+    }
+
+    if (txFormat == MultiUserScheduler::BF_NDPA_SOUNDING_TX)
+    {
+        NS_LOG_INFO("HeFrameExchangeManager::StartFrameExchange line 255 : BF_NDPA_SOUNDING_TX");
+        m_lastCsTime = Simulator::Now();
+        SendCsFramesFromBeamformer();
+        m_NDPA_Sounding_mutex = 0;
+        m_psduMap.clear();
+        return true;
+    }
+
+    if (txFormat == MultiUserScheduler::BF_NDPA_SOUNDING_TX_SU)
+    {
+        NS_LOG_INFO("HeFrameExchangeManager::StartFrameExchange line 255 : BF_NDPA_SOUNDING_TX_SU");
+        m_lastCsTime = Simulator::Now();
+        m_NDPA_Sounding_mutex = 0;
+        SendCsFramesFromBeamformer();
+        m_psduMap.clear();
+        return true;
+    }
+
+    // attempt to add channel sounding from ns3.37 : start channel sounding
+    if (txFormat == MultiUserScheduler::CS_TX)
+    {
+        m_lastCsTime = Simulator::Now();
+        SendCsFramesFromBeamformer();
         return true;
     }
 
@@ -233,21 +416,24 @@ HeFrameExchangeManager::SendPsduMapWithProtection(WifiPsduMap psduMap, WifiTxPar
     if (!m_txParams.m_txVector.IsUlMu() && IsTrigger(m_psduMap))
     {
         NS_ASSERT(m_muScheduler);
-        const auto& trigger = m_muScheduler->GetUlMuInfo(m_linkId).trigger;
-        NS_ASSERT_MSG(!trigger.IsBasic() || m_txParams.m_acknowledgment->method ==
-                                                WifiAcknowledgment::UL_MU_MULTI_STA_BA,
-                      "Acknowledgment (" << m_txParams.m_acknowledgment.get()
-                                         << ") incompatible with Basic Trigger Frame");
-        NS_ASSERT_MSG(!trigger.IsBsrp() ||
-                          m_txParams.m_acknowledgment->method == WifiAcknowledgment::NONE,
-                      "Acknowledgment (" << m_txParams.m_acknowledgment.get()
-                                         << ") incompatible with BSRP Trigger Frame");
-        // Add a SIFS and the TB PPDU duration to the acknowledgment time of the Trigger Frame
-        auto txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
-        m_txParams.m_acknowledgment->acknowledgmentTime +=
-            m_phy->GetSifs() + HePhy::ConvertLSigLengthToHeTbPpduDuration(trigger.GetUlLength(),
-                                                                          txVector,
-                                                                          m_phy->GetPhyBand());
+        if (!m_apMac->GetPcfSupported())
+        {
+            const auto& trigger = m_muScheduler->GetUlMuInfo(m_linkId).trigger;
+            NS_ASSERT_MSG(!trigger.IsBasic() || m_txParams.m_acknowledgment->method ==
+                                                    WifiAcknowledgment::UL_MU_MULTI_STA_BA,
+                          "Acknowledgment (" << m_txParams.m_acknowledgment.get()
+                                             << ") incompatible with Basic Trigger Frame");
+            NS_ASSERT_MSG(!trigger.IsBsrp() ||
+                              m_txParams.m_acknowledgment->method == WifiAcknowledgment::NONE,
+                          "Acknowledgment (" << m_txParams.m_acknowledgment.get()
+                                             << ") incompatible with BSRP Trigger Frame");
+            // Add a SIFS and the TB PPDU duration to the acknowledgment time of the Trigger Frame
+            auto txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
+            m_txParams.m_acknowledgment->acknowledgmentTime +=
+                m_phy->GetSifs() + HePhy::ConvertLSigLengthToHeTbPpduDuration(trigger.GetUlLength(),
+                                                                              txVector,
+                                                                              m_phy->GetPhyBand());
+        }
     }
 
     // Set QoS Ack policy
@@ -524,7 +710,8 @@ HeFrameExchangeManager::SendPsduMap()
 {
     NS_LOG_FUNCTION(this);
 
-    NS_ASSERT(m_txParams.m_acknowledgment);
+    // attempt to modify the multi user for 11bf
+    // NS_ASSERT(m_txParams.m_acknowledgment);
     NS_ASSERT(!m_txTimer.IsRunning());
 
     WifiTxTimer::Reason timerType = WifiTxTimer::NOT_RUNNING; // no timer
@@ -732,29 +919,108 @@ HeFrameExchangeManager::SendPsduMap()
         responseTxVector = &acknowledgment->tbPpduTxVector;
         m_trigVector = GetTrigVector(m_muScheduler->GetUlMuInfo(m_linkId).trigger);
     }
-    /*
-     * BSRP Trigger Frame
-     */
-    else if (m_txParams.m_acknowledgment->method == WifiAcknowledgment::NONE &&
-             !m_txParams.m_txVector.IsUlMu() && IsTrigger(m_psduMap))
+    // attempt to add channel sounding from ns3.37 : sending condition for trigger psdu
+    else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsTrigger())
     {
-        CtrlTriggerHeader& trigger = m_muScheduler->GetUlMuInfo(m_linkId).trigger;
-        NS_ASSERT(trigger.IsBsrp());
-        NS_ASSERT(m_apMac);
-
-        // record the set of stations solicited by this Trigger Frame
-        for (const auto& userInfo : trigger)
+        CtrlTriggerHeader trigger;
+        (*m_psduMap.begin()->second->begin())->GetPacket()->PeekHeader(trigger);
+        if (trigger.IsBfrp())
         {
-            auto staIt = m_apMac->GetStaList(m_linkId).find(userInfo.GetAid12());
-            NS_ASSERT(staIt != m_apMac->GetStaList(m_linkId).end());
-            staExpectResponseFrom.insert(staIt->second);
+            m_trigVector = GetTrigVector(trigger);
+            txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
+            responseTxVector = &txVector;
+            timerType = WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF;
         }
+        /*
+         * BSRP Trigger Frame
+         */
+        else if (m_txParams.m_acknowledgment->method == WifiAcknowledgment::NONE &&
+                 !m_txParams.m_txVector.IsUlMu() && IsTrigger(m_psduMap))
+        {
+            if (!m_apMac->GetPcfSupported())
+            {
+                CtrlTriggerHeader& trigger = m_muScheduler->GetUlMuInfo(m_linkId).trigger;
+                NS_ASSERT(trigger.IsBsrp());
+                NS_ASSERT(m_apMac);
 
-        timerType = WifiTxTimer::WAIT_QOS_NULL_AFTER_BSRP_TF;
-        txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
-        responseTxVector = &txVector;
-        m_trigVector = GetTrigVector(m_muScheduler->GetUlMuInfo(m_linkId).trigger);
+                // record the set of stations solicited by this Trigger Frame
+                // Note : this list is to be discussed
+                // m_staExpectTbPpduFrom.clear();
+                staExpectResponseFrom.clear(); // instead defined as this one
+
+                for (const auto& userInfo : trigger)
+                {
+                    auto staIt = m_apMac->GetStaList(m_linkId).find(userInfo.GetAid12());
+                    NS_ASSERT(staIt != m_apMac->GetStaList(m_linkId).end());
+                    staExpectResponseFrom.insert(staIt->second);
+                }
+
+                // Add a SIFS and the TB PPDU duration to the acknowledgment time of the
+                // Trigger Frame, so that its Duration/ID is correctly computed
+                WifiNoAck* acknowledgment =
+                    static_cast<WifiNoAck*>(m_txParams.m_acknowledgment.get());
+                txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
+                acknowledgment->acknowledgmentTime +=
+                    m_mac->GetWifiPhy()->GetSifs() +
+                    HePhy::ConvertLSigLengthToHeTbPpduDuration(trigger.GetUlLength(),
+                                                               txVector,
+                                                               m_phy->GetPhyBand());
+
+                timerType = WifiTxTimer::WAIT_QOS_NULL_AFTER_BSRP_TF;
+                // txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
+                responseTxVector = &txVector;
+                m_trigVector = GetTrigVector(m_muScheduler->GetUlMuInfo(m_linkId).trigger);
+            }
+            else
+            {
+                CtrlTriggerHeader& trigger =
+                    m_muScheduler->GetPollingMuInfo(m_linkId).triggerUlPoll;
+                NS_ASSERT(trigger.IsBsrp());
+                NS_ASSERT(m_apMac);
+
+                // record the set of stations solicited by this Trigger Frame
+                // Note : this list is to be discussed
+                // m_staExpectTbPpduFrom.clear();
+                staExpectResponseFrom.clear(); // instead defined as this one
+
+                for (const auto& userInfo : trigger)
+                {
+                    auto staIt = m_apMac->GetStaList(m_linkId).find(userInfo.GetAid12());
+                    NS_ASSERT(staIt != m_apMac->GetStaList(m_linkId).end());
+                    staExpectResponseFrom.insert(staIt->second);
+                }
+
+                // Add a SIFS and the TB PPDU duration to the acknowledgment time of the
+                // Trigger Frame, so that its Duration/ID is correctly computed
+                WifiNoAck* acknowledgment =
+                    static_cast<WifiNoAck*>(m_txParams.m_acknowledgment.get());
+                txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
+                acknowledgment->acknowledgmentTime +=
+                    m_mac->GetWifiPhy()->GetSifs() +
+                    HePhy::ConvertLSigLengthToHeTbPpduDuration(trigger.GetUlLength(),
+                                                               txVector,
+                                                               m_phy->GetPhyBand());
+
+                timerType = WifiTxTimer::WAIT_QOS_NULL_AFTER_BSRP_TF;
+                // txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
+                responseTxVector = &txVector;
+                m_trigVector =
+                    GetTrigVector(m_muScheduler->GetPollingMuInfo(m_linkId).triggerUlPoll);
+                // Time txDuration = HePhy::ConvertLSigLengthToHeTbPpduDuration(
+                //     m_muScheduler->GetPollingMuInfo(m_linkId)
+                //         .txParamsTriggerUlPoll.m_txVector.GetLength(),
+                //     m_muScheduler->GetPollingMuInfo(m_linkId).txParamsTriggerUlPoll.m_txVector,
+                //     m_phy->GetPhyBand());
+                // Time timeout = txDuration + m_phy->GetSifs() + m_phy->GetSlot() +
+                //                m_phy->CalculatePhyPreambleAndHeaderDuration(*responseTxVector);
+                // auto hePhy = StaticCast<HePhy>(m_phy->GetPhyEntity(WIFI_MOD_CLASS_HE));
+                // hePhy->SetTrigVector(
+                //     GetTrigVector(m_muScheduler->GetPollingMuInfo(m_linkId).triggerUlPoll),
+                //     timeout);
+            }
+        }
     }
+
     /*
      * TB PPDU solicited by a Basic Trigger Frame
      */
@@ -769,10 +1035,40 @@ HeFrameExchangeManager::SendPsduMap()
         responseTxVector = &txVector;
         staExpectResponseFrom.insert(recv);
     }
+    // attempt to add channel sounding from ns3.37 : sending condition for no acknowledgment
+    else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsNdpa())
+    {
+        // No response is expected, so do nothing.
+    }
+    else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsActionNoAck())
+    {
+        // No response is expected, so do nothing.
+    }
+    else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsNdp())
+    {
+        if (m_csBeamformer != nullptr && m_csBeamformer->GetNumCsStations() == 1)
+        {
+            timerType = WifiTxTimer::WAIT_BF_REPORT_AFTER_NDP;
+            txVector = m_apMac->GetWifiRemoteStationManager()->GetDataTxVector(
+                (*m_psduMap.begin()->second->begin())->GetHeader(),
+                m_allowedWidth);
+            responseTxVector = &txVector;
+        }
+    }
     /*
      * QoS Null frames solicited by a BSRP Trigger Frame
      */
     else if (m_txParams.m_txVector.IsUlMu() &&
+             m_txParams.m_acknowledgment->method == WifiAcknowledgment::NONE)
+    {
+        // No response is expected, so do nothing.
+    }
+    else if (m_txParams.m_txVector.IsDlMu() &&
+             m_txParams.m_acknowledgment->method == WifiAcknowledgment::NONE)
+    {
+        // No response is expected, so do nothing.
+    }
+    else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsCts() &&
              m_txParams.m_acknowledgment->method == WifiAcknowledgment::NONE)
     {
         // No response is expected, so do nothing.
@@ -797,11 +1093,18 @@ HeFrameExchangeManager::SendPsduMap()
                                                                 m_txParams.m_txVector,
                                                                 m_phy->GetPhyBand());
     }
+    // attempt to add channel sounding from ns3.37 : calculate duration for channel sounding
+    else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsActionNoAck() &&
+             m_csBeamformee != nullptr &&
+             m_csBeamformee->GetHeMimoControlHeader().GetFeedbackType() == HeMimoControlHeader::SU)
+    {
+        txDuration =
+            m_phy->CalculateTxDuration(psduMap, m_txParams.m_txVector, m_phy->GetPhyBand());
+    }
     else
     {
         txDuration =
             m_phy->CalculateTxDuration(psduMap, m_txParams.m_txVector, m_phy->GetPhyBand());
-
         // Set Duration/ID
         Time durationId = GetPsduDurationId(txDuration, m_txParams);
         for (auto& psdu : m_psduMap)
@@ -819,16 +1122,44 @@ HeFrameExchangeManager::SendPsduMap()
                                 &HeFrameExchangeManager::SendPsduMap,
                                 this);
         }
-        else if (!m_txParams.m_txVector.IsUlMu())
+        // attempt to add channel sounding from ns3.37 : star
+        // else if (!m_txParams.m_txVector.IsUlMu())
+        else if (!m_txParams.m_txVector.IsUlMu() &&
+                 ((m_csBeamformee != nullptr && !m_csBeamformee->IsNdpaReceived()) ||
+                  (m_csBeamformer != nullptr && !m_csBeamformer->IsNdpaSent())))
         {
-            Simulator::Schedule(txDuration, &HeFrameExchangeManager::TransmissionSucceeded, this);
+            // attempt to modify the MU-MIMO for 11bf : add condition to handle the polling frame
+            if ((*m_psduMap.begin()->second->begin())->GetHeader().IsCfPoll())
+            {
+            }
+            else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsCts())
+            {
+            }
+            else
+            {
+                Simulator::Schedule(txDuration,
+                                    &HeFrameExchangeManager::TransmissionSucceeded,
+                                    this);
+            }
         }
     }
     else
     {
         Time timeout = txDuration + m_phy->GetSifs() + m_phy->GetSlot() +
                        m_phy->CalculatePhyPreambleAndHeaderDuration(*responseTxVector);
-        m_channelAccessManager->NotifyAckTimeoutStartNow(timeout);
+        if (m_apMac && m_apMac->GetPcfSupported())
+        {
+            // std::cout << m_apMac->GetCfpMaxDuration()<< std::endl;
+            // std::cout << m_apMac->GetCfpMaxDuration() - timeout << std::endl;
+            // std::cout << timeout << std::endl;
+            // m_channelAccessManager->NotifyAckTimeoutStartNow(m_apMac->GetCfpMaxDuration());
+            // m_channelAccessManager->NotifyAckTimeoutStartNow(m_apMac->GetCfpMaxDuration() - timeout); 
+            // m_channelAccessManager->NotifyAckTimeoutStartNow(timeout);
+        }
+        else
+        {
+            m_channelAccessManager->NotifyAckTimeoutStartNow(timeout);
+        }
 
         // start timer
         switch (timerType)
@@ -881,6 +1212,24 @@ HeFrameExchangeManager::SendPsduMap()
                           m_psduMap.begin()->second,
                           m_txParams.m_txVector);
             break;
+            // attempt to add channel sounding from ns3.37 : timer for beamforming report
+            // modification : adding staExpectResponseFrom as a parameter because changes of set
+            // function
+        case WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF:
+            m_txTimer.Set(timerType,
+                          timeout,
+                          staExpectResponseFrom,
+                          &HeFrameExchangeManager::BfReportTimeout,
+                          this);
+            break;
+        case WifiTxTimer::WAIT_BF_REPORT_AFTER_NDP:
+            m_txTimer.Set(timerType,
+                          timeout,
+                          staExpectResponseFrom,
+                          &HeFrameExchangeManager::BfReportTimeout,
+                          this);
+            break;
+
         default:
             NS_ABORT_MSG("Unknown timer type: " << timerType);
             break;
@@ -892,16 +1241,48 @@ HeFrameExchangeManager::SendPsduMap()
 
     if (timerType == WifiTxTimer::WAIT_BLOCK_ACKS_IN_TB_PPDU ||
         timerType == WifiTxTimer::WAIT_TB_PPDU_AFTER_BASIC_TF ||
-        timerType == WifiTxTimer::WAIT_QOS_NULL_AFTER_BSRP_TF)
+        timerType == WifiTxTimer::WAIT_QOS_NULL_AFTER_BSRP_TF ||
+        timerType == WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF) // attempt to add channel sounding
+                                                                // ns3.37 : add waiting condition
+                                                                // for beamforming report
     {
-        // Pass TRIGVECTOR to HE PHY (equivalent to PHY-TRIGGER.request primitive)
-        auto hePhy = StaticCast<HePhy>(m_phy->GetPhyEntity(responseTxVector->GetModulationClass()));
-        hePhy->SetTrigVector(m_trigVector, m_txTimer.GetDelayLeft());
+        // attempt to add channel sounding from ns3.37 : add another waiting condition for
+        // beamforming report
+        if (timerType == WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF)
+        {
+            Time timeout = txDuration + m_phy->GetSifs() + m_phy->GetSlot() +
+                           m_phy->CalculatePhyPreambleAndHeaderDuration(*responseTxVector);
+            auto hePhy = StaticCast<HePhy>(m_phy->GetPhyEntity(WIFI_MOD_CLASS_HE));
+            hePhy->SetTrigVector(m_trigVector, timeout);
+        }
+        else
+        {
+            // Pass TRIGVECTOR to HE PHY (equivalent to PHY-TRIGGER.request primitive)
+            auto hePhy =
+                StaticCast<HePhy>(m_phy->GetPhyEntity(responseTxVector->GetModulationClass()));
+            hePhy->SetTrigVector(m_trigVector, m_txTimer.GetDelayLeft());
+        }
+    }
+    // attempt to add channel sounding from ns3.37 : add condition to reset received ndpa status
+    else if (timerType == WifiTxTimer::NOT_RUNNING &&
+             ((m_csBeamformee != nullptr && m_csBeamformee->IsNdpaReceived() &&
+               (*m_psduMap.begin()->second->begin())->GetHeader().IsActionNoAck())))
+    {
+        m_csBeamformee->SetNdpaReceived(false);
+        m_csBeamformee->SetNdpReceived(false);
     }
     else if (timerType == WifiTxTimer::NOT_RUNNING && m_txParams.m_txVector.IsUlMu())
     {
         // clear m_psduMap after sending QoS Null frames following a BSRP Trigger Frame
         Simulator::Schedule(txDuration, &WifiPsduMap::clear, &m_psduMap);
+    }
+    // Attempt to modify MU-MIMO for 11bf polling phase
+    // Handling the DL poll frame transmission
+    else if (timerType == WifiTxTimer::NOT_RUNNING && m_txParams.m_txVector.IsDlMu() &&
+             m_apMac->GetPcfSupported() && m_psduMap.begin()->second->GetHeader(0).IsCfPoll())
+    {
+        // clear m_psduMap after sending QoS Null frames following a BSRP Trigger Frame
+        // Simulator::Schedule(txDuration, &WifiPsduMap::clear, &m_psduMap);
     }
 }
 
@@ -1279,14 +1660,32 @@ HeFrameExchangeManager::TbPpduTimeout(WifiPsduMap* psduMap, std::size_t nSolicit
     if (staMissedTbPpduFrom.size() == nSolicitedStations)
     {
         // no station replied, the transmission failed
-        m_edca->UpdateFailedCw(m_linkId);
-
-        TransmissionFailed();
+        if (m_apMac && m_apMac->GetPcfSupported())
+        {
+            ResetSensingTimeout();
+            // std::cout << "--- Collision in polling phase ---" << std::endl;
+            m_apMac->SensingRetransmission();
+        }
+        else
+        {
+            m_edca->UpdateFailedCw(m_linkId);
+            TransmissionFailed();
+        }
     }
     else if (!m_multiStaBaEvent.IsRunning())
     {
-        m_edca->ResetCw(m_linkId);
-        TransmissionSucceeded();
+        // Modification for IEEE 802.11bf
+        if (m_apMac && m_apMac->GetPcfSupported())
+        {
+            ResetSensingTimeout();
+            // std::cout << "--- Collision in polling phase ---" << std::endl;
+            m_apMac->SensingRetransmission();
+        }
+        else
+        {
+            m_edca->ResetCw(m_linkId);
+            TransmissionSucceeded();
+        }
     }
 
     m_psduMap.clear();
@@ -1520,12 +1919,13 @@ HeFrameExchangeManager::GetHeTbTxVector(CtrlTriggerHeader trigger, Mac48Address 
                     << "dBm)");
     }
     v.SetTxPowerLevel(powerLevel);
-    NS_LOG_LOGIC("UL power control: "
-                 << "input {pathLoss=" << pathLossDb << "dB, reqTxPower=" << reqTxPowerDbm << "dBm}"
-                 << " output {powerLevel=" << +powerLevel << " -> "
-                 << m_phy->GetPowerDbm(powerLevel) << "dBm}"
-                 << " PHY power capa {min=" << m_phy->GetTxPowerStart() << "dBm, max="
-                 << m_phy->GetTxPowerEnd() << "dBm, levels:" << +numPowerLevels << "}");
+    NS_LOG_LOGIC("UL power control: " << "input {pathLoss=" << pathLossDb
+                                      << "dB, reqTxPower=" << reqTxPowerDbm << "dBm}"
+                                      << " output {powerLevel=" << +powerLevel << " -> "
+                                      << m_phy->GetPowerDbm(powerLevel) << "dBm}"
+                                      << " PHY power capa {min=" << m_phy->GetTxPowerStart()
+                                      << "dBm, max=" << m_phy->GetTxPowerEnd()
+                                      << "dBm, levels:" << +numPowerLevels << "}");
 
     return v;
 }
@@ -2181,6 +2581,7 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
                                     const WifiTxVector& txVector,
                                     bool inAmpdu)
 {
+    NS_LOG_FUNCTION(this << *mpdu << rxSignalInfo << txVector << inAmpdu);
     // The received MPDU is either broadcast or addressed to this station
     NS_ASSERT(mpdu->GetHeader().GetAddr1().IsGroup() || mpdu->GetHeader().GetAddr1() == m_self);
 
@@ -2262,7 +2663,6 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
         {
             // we do not expect any other BlockAck frame
             m_txTimer.Cancel();
-            m_channelAccessManager->NotifyAckTimeoutResetNow();
 
             if (!m_multiStaBaEvent.IsRunning())
             {
@@ -2277,7 +2677,132 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
         // the received TB PPDU has been processed
         return;
     }
+    // attempt to add channel sounding from ns3.37 : add condition for receiving from timer
+    // perspective
+    if (hdr.IsActionNoAck() && m_apMac != nullptr && m_txTimer.IsRunning() &&
+        (m_txTimer.GetReason() == WifiTxTimer::WAIT_BF_REPORT_AFTER_NDP ||
+         m_txTimer.GetReason() == WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF))
+    {
+        uint16_t staId = m_apMac->GetAssociationId(hdr.GetAddr2(), m_linkId);
+        if (m_csBeamformer != nullptr && std::find(m_csBeamformer->GetCsStaIdList().begin(),
+                                                   m_csBeamformer->GetCsStaIdList().end(),
+                                                   staId) != m_csBeamformer->GetCsStaIdList().end())
+        {
+            m_csBeamformer->GetBfReportInfo(mpdu, staId);
+            // m_csBeamformer->PrintChannelInfo();
+            std::list<uint16_t> sta = m_csBeamformer->CheckAllChannelInfoReceived();
+            if (sta.empty())
+            {
+                NS_LOG_INFO("Receive CSI from all stations. Channel sounding process ends.");
+                m_txTimer.Cancel();
+                m_csBeamformer->SetNdpaSent(false);
+                m_csBeamformer->SetNdpSent(false);
 
+                NS_LOG_DEBUG("Duration of channel sounding process: "
+                             << (Simulator::Now()).GetNanoSeconds() - m_lastCsTime.GetNanoSeconds()
+                             << ", Number of stations: " << m_csBeamformer->GetNumCsStations());
+
+                if (m_csDurationOutput)
+                {
+                    std::cout << "Duration of channel sounding process: "
+                              << ((Simulator::Now()).GetNanoSeconds() -
+                                  m_lastCsTime.GetNanoSeconds()) /
+                                     1000000.0
+                              << "ms, Number of stations: "
+                              << std::to_string(m_csBeamformer->GetNumCsStations()) << std::endl;
+                }
+
+                // if (m_apMac->GetPcfSupported() &&
+                //     (m_apMac->GetRemainingCfpDuration()).IsStrictlyPositive())
+                if (m_apMac->GetPcfSupported())
+                {
+                    if (m_muScheduler->GetSoundingType() == 0U &&
+                        m_muScheduler->DoSUNDPASoundingStation() &&
+                        m_muScheduler->GetPollingCandidatesSize() != 1)
+                    {
+                        Simulator::Schedule(m_phy->GetSifs(),
+                                            &HeFrameExchangeManager::StartFrameExchange,
+                                            this,
+                                            m_edca,
+                                            m_apMac->GetCfpMaxDuration(),
+                                            false);
+                    }
+                    else
+                    {
+                        m_apMac->GetWifiPhy()->NotifyMonitorChannelAccess(GetAddress(),
+                                                                          Simulator::Now(),
+                                                                          true);
+                        m_psduMap.clear();
+                        // m_edca->ResetCw(m_linkId);
+                        m_edca->EndTxNoAck(m_linkId, mpdu);
+                        m_edca->NotifyChannelReleasedForPCF(0U, false, Seconds(0));
+                        ResetSensingTimeout();
+                        m_apMac->EndSensing();
+                        // std::cout << "Sensing successfully ended from : " << GetAddress() << " "
+                        //           << Simulator::Now() << std::endl;
+                        m_edca = nullptr;
+                    }
+                }
+                else
+                {
+                    TransmissionSucceeded();
+                    m_lastCsTime = Simulator::Now();
+                }
+            }
+        }
+
+        return;
+    }
+    // attempt to add channel sounding from ns3.37 : add condition for case NDP frame is received
+    if (hdr.IsNdp() && m_staMac != nullptr && m_csBeamformee != nullptr &&
+        m_csBeamformee->IsNdpaReceived())
+    {
+        uint16_t staId = m_staMac->GetAssociationId();
+        //  Get NDP frame information and calculate channel information
+        m_csBeamformee->GetNdpInfo(txVector, staId);
+
+        // m_csBeamformee->PrintChannelInfo();
+        m_csBeamformee->GenerateBfReport(staId, hdr.GetAddr2(), m_staMac->GetAddress(), m_bssid);
+        if (mpdu->GetHeader().GetAddr1().IsBroadcast())
+        {
+            NS_LOG_INFO("|");
+            NS_LOG_INFO(" ---------------------------------------------------------------");
+            NS_LOG_INFO("| " << Simulator::Now() << " Received : " << hdr
+                             << " SNR: " << 10.0 * std::log10(rxSignalInfo.snr));
+            NS_LOG_INFO(" ---------------------------------------------------------------");
+            NS_LOG_INFO("|");
+        }
+
+        if (m_csBeamformee->GetHeMimoControlHeader().GetFeedbackType() == HeMimoControlHeader::SU)
+        {
+            m_txParams.Clear();
+            auto heConfiguration = m_mac->GetHeConfiguration();
+
+            WifiMacHeader hdr = m_csBeamformee->GetBfReport()->GetHeader();
+            hdr.SetType(WIFI_MAC_QOSDATA);
+            WifiTxVector suTxVector =
+                m_staMac->GetWifiRemoteStationManager()->GetDataTxVector(hdr, m_allowedWidth);
+            WifiMode csMode = m_csMode == "0" ? suTxVector.GetMode() : WifiMode(m_csMode);
+            suTxVector.SetMode(csMode);
+            suTxVector.SetNss(1);
+            m_txParams.m_txVector = suTxVector;
+
+            m_txParams.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+            m_txParams.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection());
+
+            m_txParams.AddMpdu(m_csBeamformee->GetBfReport());
+            UpdateTxDuration(m_csBeamformee->GetBfReport()->GetHeader().GetAddr1(), m_txParams);
+
+            Simulator::Schedule(
+                m_phy->GetSifs(),
+                &HeFrameExchangeManager::SendPsduMapWithProtection,
+                this,
+                WifiPsduMap{
+                    {staId, GetWifiPsdu(m_csBeamformee->GetBfReport(), m_txParams.m_txVector)}},
+                m_txParams);
+        }
+        return;
+    }
     if (txVector.IsUlMu() && m_txTimer.IsRunning() &&
         m_txTimer.GetReason() == WifiTxTimer::WAIT_QOS_NULL_AFTER_BSRP_TF &&
         !inAmpdu) // if in A-MPDU, processing is done at the end of A-MPDU reception
@@ -2291,8 +2816,34 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
         }
         if (!(hdr.IsQosData() && !hdr.HasData()))
         {
-            NS_LOG_WARN("No QoS Null frame in the received MPDU");
-            return;
+            if (m_apMac->GetPcfSupported() && hdr.IsCts())
+            {
+                // remove the sender from the set of stations that are expected to send a TB PPDU
+                m_txTimer.GotResponseFrom(sender);
+                m_muScheduler->CheckRespondedPollingStation(hdr.GetAddr2());
+                if (m_NDPA_Sounding_mutex == 0)
+                {
+                    m_NDPA_Sounding_mutex = 1;
+                    Simulator::Schedule(m_phy->GetSifs(),
+                                        &HeFrameExchangeManager::StartFrameExchange,
+                                        this,
+                                        m_edca,
+                                        m_apMac->GetCfpMaxDuration() - m_txTimer.GetDelayLeft(),
+                                        false);
+                }
+
+                if (m_txTimer.GetStasExpectedToRespond().empty())
+                {
+                    // // we do not expect any other response
+                    m_txTimer.Cancel();
+                    return;
+                }
+            }
+            else
+            {
+                NS_LOG_WARN("No QoS Null frame in the received MPDU");
+                return;
+            }
         }
 
         NS_LOG_DEBUG("Received a QoS Null frame in a TB PPDU from " << sender);
@@ -2572,7 +3123,6 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
             }
 
             uint16_t staId = m_staMac->GetAssociationId();
-
             if (trigger.IsMuRts())
             {
                 Mac48Address sender = hdr.GetAddr2();
@@ -2629,11 +3179,87 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
             }
             else if (trigger.IsBsrp())
             {
+                if (m_staMac->GetPcfSupported() && trigger.IsBsrp())
+                {
+                    if (!m_Polling_Receive_mutex)
+                    {
+                        return;
+                    }
+
+                    if (mpdu->GetHeader().GetAddr1().IsBroadcast())
+                    {
+                        NS_LOG_INFO("|");
+                        NS_LOG_INFO(
+                            " ---------------------------------------------------------------");
+                        NS_LOG_INFO("| " << Simulator::Now() << " Received : " << hdr
+                                         << " SNR: " << 10.0 * std::log10(rxSignalInfo.snr));
+                        NS_LOG_INFO(
+                            " ---------------------------------------------------------------");
+                        NS_LOG_INFO("|");
+                    }
+                    Simulator::Schedule(m_phy->GetSifs(),
+                                        &HeFrameExchangeManager::ReceivePollingFrame,
+                                        this,
+                                        trigger,
+                                        hdr);
+                    m_Polling_Receive_mutex = 0;
+                }
+                else
+                {
+                    Simulator::Schedule(m_phy->GetSifs(),
+                                        &HeFrameExchangeManager::SendQosNullFramesInTbPpdu,
+                                        this,
+                                        trigger,
+                                        hdr);
+                }
+            }
+            // attempt to add channel sounding from ns3.37 : add condition with case trigger frame
+            // is for BFRP
+            else if (trigger.IsBfrp())
+            {
+                if (mpdu->GetHeader().GetAddr1().IsBroadcast())
+                {
+                    NS_LOG_INFO("|");
+                    NS_LOG_INFO(" ---------------------------------------------------------------");
+                    NS_LOG_INFO("| " << Simulator::Now() << " Received : " << hdr
+                                     << " SNR: " << 10.0 * std::log10(rxSignalInfo.snr));
+                    NS_LOG_INFO(" ---------------------------------------------------------------");
+                    NS_LOG_INFO("|");
+                }
                 Simulator::Schedule(m_phy->GetSifs(),
-                                    &HeFrameExchangeManager::SendQosNullFramesInTbPpdu,
+                                    &HeFrameExchangeManager::ReceiveBfrpTrigger,
                                     this,
                                     trigger,
                                     hdr);
+            }
+        }
+        // attempt to add channel sounding from ns3.37 : add condition if recevied frame NDPA
+        else if (hdr.IsNdpa() && m_csBeamformee != nullptr)
+        {
+            CtrlNdpaHeader ndpaHeader;
+            mpdu->GetPacket()->PeekHeader(ndpaHeader);
+
+            uint16_t staId = m_staMac->GetAssociationId();
+            uint16_t aid11 = staId & 0x07ff;
+
+            bool ndpaReceived = (ndpaHeader.FindStaInfoWithAid(aid11) != ndpaHeader.end());
+            if (ndpaReceived)
+            {
+                m_csBeamformee->SetNdpaReceived(true);
+                m_csBeamformee->GetNdpaInfo(mpdu, staId);
+                if (mpdu->GetHeader().GetAddr1().IsBroadcast())
+                {
+                    NS_LOG_INFO("|");
+                    NS_LOG_INFO(" ---------------------------------------------------------------");
+                    NS_LOG_INFO("| " << Simulator::Now() << " Received : " << hdr
+                                     << " SNR: " << 10.0 * std::log10(rxSignalInfo.snr));
+                    NS_LOG_INFO(" ---------------------------------------------------------------");
+                    NS_LOG_INFO("|");
+                }
+            }
+            else
+            {
+                m_csBeamformee->SetNdpaReceived(false);
             }
         }
         else
@@ -2646,6 +3272,10 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
         return;
     }
 
+    if (hdr.IsCfPoll())
+    {
+        m_Polling_Receive_mutex = 1;
+    }
     // the received frame cannot be handled here
     VhtFrameExchangeManager::ReceiveMpdu(mpdu, rxSignalInfo, txVector, inAmpdu);
     ;
@@ -2794,6 +3424,248 @@ HeFrameExchangeManager::EndReceiveAmpdu(Ptr<const WifiPsdu> psdu,
 
     // the received frame cannot be handled here
     VhtFrameExchangeManager::EndReceiveAmpdu(psdu, rxSignalInfo, txVector, perMpduStatus);
+}
+
+/*
+*************************************
+Attempt to add Channel Sounding from ns3.37
+Public Functions for HE Frame Exchange Manager
+*************************************
+*/
+
+void
+HeFrameExchangeManager::ReceiveBfrpTrigger(const CtrlTriggerHeader& trigger,
+                                           const WifiMacHeader& hdr)
+{
+    NS_LOG_FUNCTION(this << trigger << hdr);
+    NS_ASSERT(trigger.IsBfrp() && m_csBeamformee != nullptr);
+
+    NS_LOG_DEBUG("Received a BFRP Trigger Frame soliciting CSI feedback");
+    NS_LOG_INFO("Received a BFRP Trigger Frame soliciting CSI feedback");
+    if (trigger.GetCsRequired() && hdr.GetAddr2() != m_txopHolder && m_navEnd > Simulator::Now())
+    {
+        NS_LOG_DEBUG("Carrier Sensing required and channel busy, do nothing");
+        return;
+    }
+
+    uint16_t staId = m_staMac->GetAssociationId();
+
+    m_txParams.Clear();
+    m_txParams.m_txVector = GetHeTbTxVector(trigger, hdr.GetAddr2());
+    m_txParams.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+    m_txParams.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection());
+
+    m_txParams.AddMpdu(m_csBeamformee->GetBfReport());
+    UpdateTxDuration(m_csBeamformee->GetBfReport()->GetHeader().GetAddr1(), m_txParams);
+
+    Ptr<WifiPsdu> psdu;
+    psdu = GetWifiPsdu(m_csBeamformee->GetBfReport(), m_txParams.m_txVector);
+    SendPsduMapWithProtection(WifiPsduMap{{staId, psdu}}, m_txParams);
+}
+
+void
+HeFrameExchangeManager::BfReportTimeout(void)
+{
+    NS_LOG_FUNCTION(this);
+
+    if (m_csBeamformer != nullptr)
+    {
+        std::list<uint16_t> sta = m_csBeamformer->CheckAllChannelInfoReceived();
+        NS_LOG_INFO("There are " << sta.size() << " stations that failed to feed back CSI.");
+
+        if (sta.size() == m_csBeamformer->GetNumCsStations())
+        {
+            if (m_apMac && m_edca && m_apMac->GetPcfSupported())
+            {
+                ResetSensingTimeout();
+                // std::cout << "--- Collision in reporting phase ---" << std::endl;
+                m_apMac->SensingRetransmission();
+            }
+            else
+            {
+                m_edca->UpdateFailedCw(m_linkId);
+                TransmissionFailed();
+            }
+        }
+        else
+        {
+            if (m_apMac && m_edca && m_apMac->GetPcfSupported())
+            {
+                ResetSensingTimeout();
+                // std::cout << "--- Collision in reporting phase ---" << std::endl;
+                m_apMac->SensingRetransmission();
+            }
+            else
+            {
+                m_edca->ResetCw(m_linkId);
+                TransmissionSucceeded();
+            }
+        }
+        m_csBeamformer->SetNdpaSent(false);
+        m_csBeamformer->SetNdpSent(false);
+        m_psduMap.clear();
+    }
+}
+
+void
+HeFrameExchangeManager::SendCsFramesFromBeamformer()
+{
+    m_csBeamformer->SetNdpaSent(true);
+    SendPsduMapWithProtection(
+        WifiPsduMap{
+            {SU_STA_ID,
+             GetWifiPsdu(m_csBeamformer->GetBeamformerFrameInfo().m_ndpa,
+                         m_csBeamformer->GetBeamformerFrameInfo().m_txParamsNdpa.m_txVector)}},
+        m_csBeamformer->GetBeamformerFrameInfo().m_txParamsNdpa);
+    Time ndpTime =
+        m_csBeamformer->GetBeamformerFrameInfo().m_txParamsNdpa.m_txDuration + m_phy->GetSifs();
+
+    Simulator::Schedule(
+        ndpTime,
+        &HeFrameExchangeManager::SendPsduMapWithProtection,
+        this,
+        WifiPsduMap{
+            {SU_STA_ID,
+             GetWifiPsdu(m_csBeamformer->GetBeamformerFrameInfo().m_ndp,
+                         m_csBeamformer->GetBeamformerFrameInfo().m_txParamsNdp.m_txVector)}},
+        m_csBeamformer->GetBeamformerFrameInfo().m_txParamsNdp);
+    if (m_csBeamformer->GetNumCsStations() > 1)
+    {
+        Time TF_time = ndpTime +
+                       m_csBeamformer->GetBeamformerFrameInfo().m_txParamsNdp.m_txDuration +
+                       m_phy->GetSifs();
+        Simulator::Schedule(
+            TF_time,
+            &HeFrameExchangeManager::SendPsduMapWithProtection,
+            this,
+            WifiPsduMap{
+                {SU_STA_ID,
+                 GetWifiPsdu(
+                     m_csBeamformer->GetBeamformerFrameInfo().m_trigger,
+                     m_csBeamformer->GetBeamformerFrameInfo().m_txParamsBfrpTrigger.m_txVector)}},
+            m_csBeamformer->GetBeamformerFrameInfo().m_txParamsBfrpTrigger);
+    }
+}
+
+Ptr<CsBeamformer>
+HeFrameExchangeManager::GetCsBeamformer() const
+{
+    NS_ASSERT(m_csBeamformer != nullptr);
+    return m_csBeamformer;
+}
+
+Ptr<CsBeamformee>
+HeFrameExchangeManager::GetCsBeamformee() const
+{
+    NS_ASSERT(m_csBeamformee != nullptr);
+    return m_csBeamformee;
+}
+
+std::string
+HeFrameExchangeManager::GetCsMode() const
+{
+    return m_csMode;
+}
+
+/*
+*************************************
+Attempt to add Channel Sounding from ns3.37
+Public Functions for HE Frame Exchange Manager
+*************************************
+*/
+
+void
+HeFrameExchangeManager::ReceivePollingFrame(const CtrlTriggerHeader& trigger,
+                                            const WifiMacHeader& hdr)
+{
+    NS_LOG_FUNCTION(this);
+    NS_ASSERT(m_staMac && m_staMac->IsAssociated());
+    NS_LOG_DEBUG("Received a Polling Frame soliciting a transmission");
+
+    if (!UlMuCsMediumIdle(trigger))
+    {
+        return;
+    }
+
+    // create the sequence of TIDs to check
+    std::vector<uint8_t> tids;
+
+    Ptr<Packet> packetCtsToSelf = Create<Packet>();
+    WifiMacHeader cts;
+    cts.SetType(WIFI_MAC_CTL_CTS);
+    cts.SetDsNotFrom();
+    cts.SetDsNotTo();
+    cts.SetNoMoreFragments();
+    cts.SetNoRetry();
+    // cts.SetAddr1(GetBssid());
+    // cts.SetAddr2(GetAddress());
+
+    cts.SetAddr1(hdr.GetAddr2());
+    cts.SetAddr2(m_self);
+    // cts.SetAddr3(hdr.GetAddr2());
+
+    // Time ctsDuration = m_phy->CalculateTxDuration(GetCtsSize(),
+    //                                               ctsToSelfProtection->ctsTxVector,
+    //                                               m_phy->GetPhyBand());
+
+    // Time ctsDuration = m_phy->CalculateTxDuration(GetCtsSize(),
+    //                                               ctsToSelfProtection->ctsTxVector,
+    //                                               WIFI_PHY_BAND_2_4GHZ);
+
+    WifiTxParameters txParams;
+    WifiMode modetxParams("HeMcs0");
+    txParams.m_txVector.SetMode(modetxParams);
+    // txParams.m_txVector = GetWifiRemoteStationManager()->GetCtsToSelfTxVector();
+    txParams.m_txVector = GetHeTbTxVector(trigger, hdr.GetAddr2());
+    // txParams.m_protection = std::make_unique<WifiCtsToSelfProtection>();
+    txParams.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection);
+    // txParams.m_protection =  std::make_unique<WifiCtsToSelfProtection>();
+    txParams.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+    // txParams.m_txDuration = m_phy->CalculateTxDuration(GetCtsSize(), txParams.m_txVector,
+    // m_phy->GetPhyBand(), m_staMac->GetAssociationId()); auto ctsToSelfProtection =
+    // static_cast<WifiCtsToSelfProtection*>(txParams.m_protection.get());
+    // ctsToSelfProtection->ctsTxVector.SetMode(modetxParams);
+    // ctsToSelfProtection->ctsTxVector.SetGuardInterval(trigger.GetGuardInterval());
+    // ctsToSelfProtection->ctsTxVector.SetNss(1);
+    // cts.SetDuration(FrameExchangeManager::GetTxDuration(GetCtsSize(), GetBssid(), txParams));
+    Ptr<WifiMpdu> mpdu = Create<WifiMpdu>(packetCtsToSelf, cts);
+    // txParams.AddMpdu(mpdu);
+    // UpdateTxDuration(mpdu->GetHeader().GetAddr1(), txParams);
+    Time ppduDuration = HePhy::ConvertLSigLengthToHeTbPpduDuration(trigger.GetUlLength(),
+                                                                   txParams.m_txVector,
+                                                                   m_phy->GetPhyBand());
+    // cts.SetDuration(hdr.GetDuration() - m_phy->GetSifs() - ppduDuration);
+    // cts.SetDuration(ppduDuration - hdr.GetDuration() - m_phy->GetSifs());
+    // ctsToSelfProtection->ctsTxVector =
+    // m_mac->GetWifiRemoteStationManager()->GetCtsToSelfTxVector();
+
+    // m_txParams = std::move(txParams);
+    // m_psduMap = std::move(WifiPsduMap{{staId, psdu}});
+    // SendPsduMap();
+
+    m_staMac->GetChannelAccessManager()->NotifyNavStartNow(m_staMac->GetCfpMaxDuration());
+
+    Ptr<WifiPsdu> psdu = Create<WifiPsdu>(mpdu, false);
+    uint16_t staId = m_staMac->GetAssociationId();
+    m_edca = m_staMac->GetQosTxop(0U);
+    SendPsduMapWithProtection(WifiPsduMap{{staId, psdu}}, txParams);
+}
+
+void
+HeFrameExchangeManager::ResetSensingTimeout()
+{
+    if (m_muScheduler)
+    {
+        m_Polling_Receive_mutex = 0;
+        m_NDPA_Sounding_mutex = 0;
+        m_muScheduler->SensingTimeout();
+        if (m_edca)
+        {
+            // DequeueMpdu(m_edca->PeekNextMpdu(m_linkId));
+            // m_edca->NotifyChannelReleasedForPCF(0U, true, Seconds(0));
+            // m_apMac->SensingRetransmission();
+        }
+    }
 }
 
 } // namespace ns3

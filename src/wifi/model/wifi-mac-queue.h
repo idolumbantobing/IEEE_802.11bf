@@ -71,7 +71,7 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
      * \return the object TypeId
      */
     static TypeId GetTypeId();
-
+    // static const ConstIterator EMPTY; //!< Invalid iterator to signal an empty queue
     /**
      * Constructor
      *
@@ -87,6 +87,8 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
     using Queue<WifiMpdu, WifiMacQueueContainer>::IsEmpty;
     using Queue<WifiMpdu, WifiMacQueueContainer>::GetNPackets;
     using Queue<WifiMpdu, WifiMacQueueContainer>::GetNBytes;
+    // using Queue<WifiMpdu, WifiMacQueueContainer>::begin;
+    // using Queue<WifiMpdu, WifiMacQueueContainer>::end;
 
     /**
      * Get the Access Category of the packets stored in this queue
@@ -299,10 +301,57 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
      */
     Ptr<WifiMpdu> GetAlias(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
 
+    /*
+    *************************************
+    Attempt to add PCF from ns3.33
+    Public Functions and Attributes for Txop
+    *************************************
+    */
+    /**
+     * Search and return, if present in the queue, the first packet (either Data
+     * frame or QoS Data frame) having the receiver address equal to <i>addr</i>.
+     * This method removes the packet from the queue.
+     * It is typically used by ns3::Txop during the CF period.
+     *
+     * \param dest the given destination
+     *
+     * \return the packet
+     */
+    Ptr<WifiMpdu> DequeueByAddress(Mac48Address dest);
+    /**
+     * Return the number of packets having destination address specified by
+     * <i>dest</i>.
+     *
+     * \param dest the given destination
+     *
+     * \return the number of packets
+     */
+    uint32_t GetNPacketsByAddress(Mac48Address dest);
+    /**
+     * Search and return, if present in the queue, the first packet (either Data
+     * frame or QoS Data frame) having the receiver address equal to <i>addr</i>.
+     * If <i>pos</i> is a valid iterator, the search starts from the packet pointed
+     * to by the given iterator.
+     * This method does not remove the packet from the queue.
+     *
+     * \param dest the given destination
+     * \param pos the iterator pointing to the packet the search starts from
+     *
+     * \return an iterator pointing to the peeked packet
+     */
+    // ConstIterator PeekByAddress(Mac48Address dest, ConstIterator pos = EMPTY) const;
+
   protected:
     using Queue<WifiMpdu, WifiMacQueueContainer>::GetContainer;
 
     void DoDispose() override;
+
+    /*
+    *************************************
+    Attempt to add PCF from ns3.33
+    Protected Functions and Attributes for Txop
+    *************************************
+    */
 
   private:
     /**
@@ -355,6 +404,13 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
     TracedCallback<Ptr<const WifiMpdu>> m_traceExpired;
 
     NS_LOG_TEMPLATE_DECLARE; //!< redefinition of the log component
+
+    /*
+    *************************************
+    Attempt to add PCF from ns3.33
+    Private Functions and Attributes for Txop
+    *************************************
+    */
 };
 
 } // namespace ns3

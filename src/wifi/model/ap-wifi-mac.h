@@ -22,8 +22,8 @@
 #ifndef AP_WIFI_MAC_H
 #define AP_WIFI_MAC_H
 
+#include "infrastructure-wifi-mac.h"
 #include "wifi-mac-header.h"
-#include "wifi-mac.h"
 
 #include <unordered_map>
 #include <variant>
@@ -61,7 +61,7 @@ using AssocReqRefVariant = std::variant<std::reference_wrapper<MgtAssocRequestHe
  * Handle association, dis-association and authentication,
  * of STAs within an infrastructure BSS.
  */
-class ApWifiMac : public WifiMac
+class ApWifiMac : public InfrastructureWifiMac
 {
   public:
     /**
@@ -171,6 +171,96 @@ class ApWifiMac : public WifiMac
      */
     uint8_t GetMaxBufferStatus(Mac48Address address) const;
 
+    /*
+    *************************************
+    Attempt to add PCF from ns3.33
+    Public classes for Ap Wifi Mac
+    *************************************
+    */
+    /**
+     * \param duration the maximum duration for the CF period.
+     */
+    void SetCfpMaxDuration(Time duration);
+    /**
+     * \return the maximum duration for the CF period.
+     */
+    Time GetCfpMaxDuration(void) const;
+    /**
+     * \param rate of sensing in the simulation.
+     */
+    void SetSensingRate(Time rate);
+    /**
+     * \return the maximum duration for the CF period.
+     */
+    Time GetSensingRate(void) const;
+    /**
+     * Enable or disable PCF support for the device.
+     *
+     * \param enable whether PCF is supported
+     */
+    void SetPcfSupported(bool enabled);
+    /**
+     * Return whether the device supports PCF.
+     *
+     * \return true if PCF is supported, false otherwise
+     */
+    bool GetPcfSupported() const;
+
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    Public functions and attributes for Ap Wifi Mac
+    *************************************
+    */
+
+    /**
+     * Enable or disable Channel Sounding support for the device.
+     *
+     * \param enable whether PCF is supported
+     */
+    void SetChannelSoundingSupported(bool enabled);
+    /**
+     * Return whether the device supports PCF.
+     *
+     * \return true if Channel Sounding is supported, false otherwise
+     */
+    bool GetChannelSoundingSupported() const;
+
+    /*
+    *************************************
+    Attempt to add MU-OFDMA
+    Public functions and attributes for Ap Wifi Mac
+    *************************************
+    */
+
+    /**
+     * Send a CF-Poll packet to the next polling STA.
+     */
+    void StartSensing(uint8_t linkId = 0U);
+    /**
+     * Send a CF-End packet.
+     */
+    void EndSensing(uint8_t linkId = 0U);
+    /**
+     * Send a CF-End packet.
+     */
+    void SensingRetransmission(uint8_t linkId = 0U);
+    /**
+     * Set the sensing priority.
+     */
+    void SetSensingPriority(uint16_t priority);
+    /**
+     * Set the waiting CSI report status.
+     */
+    void SetWaitingCSIReportStatus(bool waiting);
+
+    /**
+     * Get the sensing priority.
+     */
+    std::pair<uint16_t, uint16_t> GetSensingPriority(void) const;
+    std::pair<uint16_t, uint16_t> m_SensingCw; //!< Sensing Cw based on priority
+    u_int16_t m_SensingPriority;               //!< Sensing priority
+
   protected:
     /**
      * Structure holding information specific to a single link. Here, the meaning of
@@ -256,7 +346,7 @@ class ApWifiMac : public WifiMac
      *
      * \param mpdu the MPDU that we successfully sent
      */
-    void TxOk(Ptr<const WifiMpdu> mpdu);
+    void TxOk(const Ptr<const WifiMpdu> mpdu);
     /**
      * The packet we sent was successfully received by the receiver
      * (i.e. we did not receive an Ack from the receiver).  If the packet
@@ -347,10 +437,11 @@ class ApWifiMac : public WifiMac
      * \param linkId the ID of the link on which the association response must be sent
      */
     void SendAssocResp(Mac48Address to, bool isReassoc, uint8_t linkId);
+
     /**
      * Forward a beacon packet to the beacon special DCF for transmission
      * on the given link.
-     *
+     * For PCF version : Determine what is the next PCF frame and trigger its transmission.
      * \param linkId the ID of the given link
      */
     void SendOneBeacon(uint8_t linkId);
@@ -363,6 +454,7 @@ class ApWifiMac : public WifiMac
      * \param linkId the ID of the given link
      */
     void ProcessPowerManagementFlag(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
+
     /**
      * Perform the necessary actions when a given station switches from active mode
      * to powersave mode.
@@ -527,7 +619,29 @@ class ApWifiMac : public WifiMac
     Time m_bsrLifetime;            //!< Lifetime of Buffer Status Reports
     /// transition timeout events running for EMLSR clients
     std::map<Mac48Address, EventId> m_transitionTimeoutEvents;
-
+    /*
+    *************************************
+    Attempt to add PCF from ns3.33
+    private attribute for Ap Wifi Mac
+    *************************************
+    */
+    Ptr<InfrastructureWifiMac> m_inf;
+    EventId m_beaconEvent; //!< Event to generate one beacon
+    EventId m_cfpEvent;    //!< Event to generate one PCF frame
+    std::map<uint16_t, Mac48Address>
+        m_staList; //!< Map of all stations currently associated to the AP with their association ID
+    std::list<Mac48Address>
+        m_nonErpStations; //!< List of all non-ERP stations currently associated to the AP
+    std::list<Mac48Address>
+        m_nonHtStations; //!< List of all non-HT stations currently associated to the AP
+    std::list<Mac48Address>
+        m_cfPollingList; //!< List of all PCF stations currently associated to the AP
+    std::list<Mac48Address>::iterator
+        m_itCfPollingList; //!< Iterator to the list of all PCF stations currently associated to the
+                           //!< AP
+    bool m_SensingAppBegin = false; //!< Flag to indicate that the sensing application has started
+    bool m_waitingCSIReport = false; //!< Flag to indicate that the AP is waiting for a CSI report
+    Time m_sensingRate;              //!< Rate of sensing in the simulation
     /// store value and timestamp for each Buffer Status Report
     struct BsrType
     {
@@ -548,6 +662,45 @@ class ApWifiMac : public WifiMac
 
     TracedCallback<uint16_t /* AID */, Mac48Address> m_assocLogger;   ///< association logger
     TracedCallback<uint16_t /* AID */, Mac48Address> m_deAssocLogger; ///< deassociation logger
+
+    /*
+        *************************************
+        Attempt to add PCF from ns3.33
+        Private classes for Ap Wifi Mac
+        *************************************
+    */
+
+    /**
+     * Determine what is the next PCF frame and trigger its transmission.
+     */
+    void SendNextCfFrame(uint8_t linkId);
+
+    /**
+     * Return the CF parameter set of the current AP.
+     *
+     * \return the CF parameter set that we support
+     */
+    CfParameterSet GetCfParameterSet(void) const;
+
+    /**
+     * Increment the PCF polling list iterator to indicate
+     * that the next polling station can be polled.
+     */
+    void IncrementPollingListIterator(void);
+
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    Private functions and attributes for Ap Wifi Mac
+    *************************************
+    */
+
+    std::list<uint16_t>
+        m_csStaIdList; //!< Store STA ID for all the stations that the beamformer requests CSI for
+    std::list<Mac48Address>
+        m_csDlPollingList; //!< List of all PCF stations currently associated to the AP
+    std::list<Mac48Address>
+        m_csUlPollingList; //!< List of all PCF stations currently associated to the AP
 };
 
 } // namespace ns3

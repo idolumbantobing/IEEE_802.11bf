@@ -450,7 +450,7 @@ ChannelAccessManager::NeedBackoffUponAccess(Ptr<Txop> txop)
 }
 
 void
-ChannelAccessManager::RequestAccess(Ptr<Txop> txop)
+ChannelAccessManager::RequestAccess(Ptr<Txop> txop, bool IsCfPeriod)
 {
     NS_LOG_FUNCTION(this << txop);
     if (m_phy)
@@ -467,11 +467,13 @@ ChannelAccessManager::RequestAccess(Ptr<Txop> txop)
     {
         return;
     }
+    NS_LOG_INFO(Simulator::Now() << " Channel access requested for DCF: "
+                                 << txop->m_mac->GetAddress());
     /*
      * EDCAF operations shall be performed at slot boundaries (Sec. 10.22.2.4 of 802.11-2016)
      */
     Time accessGrantStart = GetAccessGrantStart() + (txop->GetAifsn(m_linkId) * GetSlot());
-
+    
     if (txop->IsQosTxop() && txop->GetBackoffStart(m_linkId) > accessGrantStart)
     {
         // The backoff start time reported by the EDCAF is more recent than the last
@@ -550,6 +552,8 @@ ChannelAccessManager::DoGrantDcfAccess()
                              : m_phy->GetChannelWidth();
             if (m_feManager->StartTransmission(txop, width))
             {
+                NS_LOG_INFO(Simulator::Now()
+                            << " Channel access granted for DCF: " << txop->m_mac->GetAddress());
                 for (auto& collidingTxop : internalCollisionTxops)
                 {
                     m_feManager->NotifyInternalCollision(collidingTxop);
@@ -624,10 +628,11 @@ ChannelAccessManager::GetAccessGrantStart(bool ignoreNav) const
     {
         ss << ", using other EMLSR link access start=" << usingOtherEmlsrLinkAccessStart;
     }
-    NS_LOG_INFO("access grant start=" << accessGrantedStart << ", rx access start=" << rxAccessStart
-                                      << ", busy access start=" << busyAccessStart
-                                      << ", tx access start=" << txAccessStart
-                                      << ", nav access start=" << navAccessStart << ss.str());
+    // NS_LOG_INFO("access grant start=" << accessGrantedStart << ", rx access start=" <<
+    // rxAccessStart
+    //                                   << ", busy access start=" << busyAccessStart
+    //                                   << ", tx access start=" << txAccessStart
+    //                                   << ", nav access start=" << navAccessStart << ss.str());
     return accessGrantedStart;
 }
 
@@ -1135,6 +1140,63 @@ ChannelAccessManager::UpdateLastIdlePeriod()
                                              << ") on channel " << lastIdleIt->first);
         }
     }
+}
+
+/*
+*************************************
+Attempt to add PCF from ns3.33
+Public Functions and Attributes for Channel Access Manager
+*************************************
+*/
+
+Time
+ChannelAccessManager::MostRecent(std::initializer_list<Time> list) const
+{
+    NS_ASSERT(list.size() > 0);
+    return *std::max_element(list.begin(), list.end());
+}
+
+void
+ChannelAccessManager::setPcfSupported(bool pcfSupported)
+{
+    m_pcfSupported = pcfSupported;
+}
+
+/*
+*************************************
+Attempt to add PCF from ns3.33
+Protected Functions and Attributes for Channel Access Manager
+*************************************
+*/
+
+/*
+*************************************
+Attempt to add PCF from ns3.33
+Private Functions and Attributes for Channel Access Manager
+*************************************
+*/
+
+void
+ChannelAccessManager::DoGrantPcfAccess(Ptr<Txop> txop)
+{
+    NS_LOG_INFO(Simulator::Now() << " Channel access granted for PCF: "
+                                 << txop->m_mac->GetAddress());
+    NS_LOG_FUNCTION(this << txop);
+    // NS_LOG_DEBUG("pcf access granted");
+    // txop->NotifyAccessGranted(m_linkId);
+}
+
+bool
+ChannelAccessManager::DoNavStartNowPCF(Time duration)
+{
+    NotifyNavStartNow(duration);
+    Time newNavEnd = Simulator::Now() + duration;
+    if (newNavEnd > m_lastNavEnd)
+    {
+        m_lastNavEnd = newNavEnd;
+        return true;
+    }
+    return false;
 }
 
 } // namespace ns3

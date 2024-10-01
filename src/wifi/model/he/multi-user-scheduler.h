@@ -20,6 +20,7 @@
 #ifndef MULTI_USER_SCHEDULER_H
 #define MULTI_USER_SCHEDULER_H
 
+#include "channel-sounding.h"
 #include "he-ru.h"
 
 #include "ns3/ap-wifi-mac.h"
@@ -65,7 +66,14 @@ class MultiUserScheduler : public Object
         NO_TX = 0,
         SU_TX,
         DL_MU_TX,
-        UL_MU_TX
+        UL_MU_TX,
+        CS_TX,
+
+        // attempt to modify MU-MIMO for 11bf Polling Phase
+        BF_POLL_DL_TX,
+        // attempt to modify MU-OFDMA for 11bf NDPA Sounding Phase
+        BF_NDPA_SOUNDING_TX,
+        BF_NDPA_SOUNDING_TX_SU
     };
 
     /// Information to be provided in case of DL MU transmission
@@ -82,6 +90,7 @@ class MultiUserScheduler : public Object
         WifiMacHeader macHdr;      //!< the MAC header for the Trigger Frame
         WifiTxParameters txParams; //!< the transmission parameters for the Trigger Frame
     };
+
 
     /**
      * Notify the Multi-user Scheduler that the given AC of the AP gained channel
@@ -129,6 +138,50 @@ class MultiUserScheduler : public Object
      *                 for channel access
      */
     void SetAccessReqInterval(Time interval);
+
+    /*
+     *************************************
+     Attempt to add support for IEEE 802.11bf 
+     Public Functions and Attributes for RR Multi User Scheduler
+     *************************************
+    */
+    /// Enumeration of the possible sounding transmission formats
+    enum SoundingType : uint8_t
+    {
+        SU_only = 0,
+        SU_and_MU = 1,
+        MU_only = 2,
+    };
+
+    /// Information to be provided in case of UL MU transmission
+    struct PollingMuInfo
+    {
+        WifiPsduMap psduMap;       //!< the MU PPDU to transmit
+        WifiTxParameters txParams; //!< the transmission parameters
+
+        CtrlTriggerHeader triggerUlPoll;   //!< the Trigger Frame used to solicit TB PPDUs
+        WifiMacHeader macHdrTriggerUlPoll; //!< the MAC header for the Trigger Frame
+        WifiTxParameters
+            txParamsTriggerUlPoll; //!< the transmission parameters for the Trigger Frame
+    };
+
+    /**
+     * Get the information required to perform a 11bf Polling Phase MU transmission on the given
+     * link. Note that this method can only be called if GetTxFormat returns BF_POLL_DL_TX on the
+     * given link.
+     *
+     * \param linkId the ID of the given link
+     * \return the information required to perform a 11bf Polling Phase MU transmission
+     */
+    PollingMuInfo& GetPollingMuInfo(uint8_t linkId);
+
+    // modification for 11bf Polling Phase
+    virtual void CheckRespondedPollingStation(Mac48Address address) = 0;
+    virtual bool DoSUNDPASoundingStation() = 0;
+    virtual ns3::MultiUserScheduler::SoundingType GetSoundingType() = 0;
+    virtual size_t GetPollingCandidatesSize() = 0;
+    bool m_nextSUSounding = 0; //!< Indicates next SU Sounding is still required>
+    void SensingTimeout();
 
   protected:
     /**
@@ -225,6 +278,14 @@ class MultiUserScheduler : public Object
      */
     virtual UlMuInfo ComputeUlMuInfo() = 0;
 
+    // Attempt to modify MU-MIMO for 11bf Polling Phase
+    /**
+     * Prepare the information required to solicit an UL MU transmission.
+     *
+     * \return the information required to solicit an UL MU transmission
+     */
+    virtual PollingMuInfo ComputePollMuInfo() = 0;
+
     /**
      * Ensure that the Trigger Frame returned in case of UL MU transmission is
      * correct. Currently, this method sets the CS Required, the AP Tx Power and
@@ -240,6 +301,10 @@ class MultiUserScheduler : public Object
         TxFormat lastTxFormat{NO_TX}; ///< the format of last transmission
         DlMuInfo dlInfo;              ///< information required to perform a DL MU transmission
         UlMuInfo ulInfo;              ///< information required to solicit an UL MU transmission
+
+        // Attempt to modify MU-MIMO for 11bf Polling Phase
+        PollingMuInfo
+            pollmuInfo; ///< information required to perform a Polling Phase of 11bf MU transmission
     };
 
     std::map<uint8_t, LastTxInfo> m_lastTxInfo; ///< Information about the last transmission

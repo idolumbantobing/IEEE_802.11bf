@@ -18,8 +18,10 @@
 
 #include "he-configuration.h"
 
+#include "ns3/boolean.h"
 #include "ns3/log.h"
 #include "ns3/nstime.h"
+#include "ns3/string.h"
 #include "ns3/uinteger.h"
 
 namespace ns3
@@ -179,7 +181,43 @@ HeConfiguration::GetTypeId()
                           "0 can only be used if the MU EDCA Timer for all ACs is set to 0.",
                           TimeValue(MicroSeconds(0)),
                           MakeTimeAccessor(&HeConfiguration::m_voMuEdcaTimer),
-                          MakeTimeChecker(MicroSeconds(0), MicroSeconds(2088960)));
+                          MakeTimeChecker(MicroSeconds(0), MicroSeconds(2088960)))
+            // Attempt to add channel sounding from ns3.37 : add new attributes
+            .AddAttribute("NgSu",
+                          "Subcarrier grouping parameter Ng used in SU channel sounding. It must "
+                          "be either 4 or 16.",
+                          UintegerValue(4),
+                          MakeUintegerAccessor(&HeConfiguration::GetNgforSuFeedback,
+                                               &HeConfiguration::SetNgforSuFeedback),
+                          MakeUintegerChecker<uint8_t>(4, 16))
+            .AddAttribute("NgMu",
+                          "Subcarrier grouping parameter Ng used in MU channel sounding. It must "
+                          "be either 4 or 16.",
+                          UintegerValue(4),
+                          MakeUintegerAccessor(&HeConfiguration::GetNgforMuFeedback,
+                                               &HeConfiguration::SetNgforMuFeedback),
+                          MakeUintegerChecker<uint8_t>(4, 16))
+            .AddAttribute("CodebookSizeSu",
+                          "Codebook size of beamforming report for SU channel sounding feedback. "
+                          "The codebook size should be chosen from (4,2) or (6,4)",
+                          StringValue("(4,2)"),
+                          MakeStringAccessor(&HeConfiguration::GetCodebookSizeforSu,
+                                             &HeConfiguration::SetCodebookSizeforSu),
+                          MakeStringChecker())
+            .AddAttribute("CodebookSizeMu",
+                          "Codebook size of beamforming report for MU channel sounding feedback. "
+                          "The codebook size should be chosen from (7,5) or (9,7)",
+                          StringValue("(7,5)"),
+                          MakeStringAccessor(&HeConfiguration::GetCodebookSizeforMu,
+                                             &HeConfiguration::SetCodebookSizeforMu),
+                          MakeStringChecker())
+            .AddAttribute(
+                "MaxNc",
+                "Max Nc for beamforming report.",
+                UintegerValue(1),
+                MakeUintegerAccessor(&HeConfiguration::GetMaxNc, &HeConfiguration::SetMaxNc),
+                MakeUintegerChecker<uint8_t>());
+    ;
     return tid;
 }
 
@@ -234,6 +272,77 @@ uint16_t
 HeConfiguration::GetMpduBufferSize() const
 {
     return m_mpduBufferSize;
+}
+
+/*
+*************************************
+Attempt to add Channel Sounding from ns3.37
+new public configurations for HE
+*************************************
+*/
+
+void
+HeConfiguration::SetNgforSuFeedback(uint8_t ng)
+{
+    NS_ASSERT_MSG(ng == 4 || ng == 16,
+                  "Subcarrier grouping parameter Ng should be either 4 or 16.");
+    m_ngforSuFeedback = ng;
+}
+
+uint8_t
+HeConfiguration::GetNgforSuFeedback() const
+{
+    return m_ngforSuFeedback;
+}
+
+void
+HeConfiguration::SetNgforMuFeedback(uint8_t ng)
+{
+    NS_ASSERT_MSG(ng == 4 || ng == 16,
+                  "Subcarrier grouping parameter Ng should be either 4 or 16.");
+    m_ngforMuFeedback = ng;
+}
+
+uint8_t
+HeConfiguration::GetNgforMuFeedback() const
+{
+    return m_ngforMuFeedback;
+}
+
+void
+HeConfiguration::SetCodebookSizeforSu(std::string codebookSize)
+{
+    m_codebookSizeforSu = codebookSize;
+}
+
+std::string
+HeConfiguration::GetCodebookSizeforSu() const
+{
+    return m_codebookSizeforSu;
+}
+
+void
+HeConfiguration::SetCodebookSizeforMu(std::string codebookSize)
+{
+    m_codebookSizeforMu = codebookSize;
+}
+
+std::string
+HeConfiguration::GetCodebookSizeforMu() const
+{
+    return m_codebookSizeforMu;
+}
+
+void
+HeConfiguration::SetMaxNc(uint8_t nc)
+{
+    m_maxNc = nc;
+}
+
+uint8_t
+HeConfiguration::GetMaxNc() const
+{
+    return m_maxNc;
 }
 
 } // namespace ns3

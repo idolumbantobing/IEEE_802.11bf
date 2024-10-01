@@ -23,7 +23,10 @@
 #include "he-frame-exchange-manager.h"
 #include "he-phy.h"
 
+#include "ns3/core-module.h"
 #include "ns3/log.h"
+#include "ns3/random-variable-stream.h"
+#include "ns3/string.h"
 #include "ns3/wifi-acknowledgment.h"
 #include "ns3/wifi-mac-queue.h"
 #include "ns3/wifi-protection.h"
@@ -94,11 +97,43 @@ RrMultiUserScheduler::GetTypeId()
                 "duration (in microseconds) times the allocated bandwidth share",
                 TimeValue(Seconds(1)),
                 MakeTimeAccessor(&RrMultiUserScheduler::m_maxCredits),
-                MakeTimeChecker());
+                MakeTimeChecker())
+            .AddAttribute("ChannelSoundingInterval",
+                          "Duration of the interval between two consecutive channel sounding "
+                          "processes. If the interval is 0, then channel sounding is disabled.",
+                          TimeValue(MilliSeconds(10)),
+                          MakeTimeAccessor(&RrMultiUserScheduler::m_csInterval),
+                          MakeTimeChecker())
+            // attempt to add Channel Sounding from ns3.37 : add new attributes for class RR Multi
+            // User Scheduler
+            .AddAttribute("EnableMuMimo",
+                          "If enabled, MU-MIMO instead of OFDMA is used.",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&RrMultiUserScheduler::m_enableMuMimo),
+                          MakeBooleanChecker())
+            .AddAttribute("NumStreamPerSta",
+                          "The number of streams sent to each station",
+                          UintegerValue(1),
+                          MakeUintegerAccessor(&RrMultiUserScheduler::m_nssPerSta),
+                          MakeUintegerChecker<uint8_t>())
+            .AddAttribute("MaxNumDlMuMimoSta",
+                          "Maximum number of stations for Dl MU-MIMO transmission",
+                          UintegerValue(1),
+                          MakeUintegerAccessor(&RrMultiUserScheduler::m_maxNumDlMuMimoSta),
+                          MakeUintegerChecker<uint8_t>())
+            // attempt to add MU OFDMA : add new attributes for class RR Multi User Scheduler
+            .AddAttribute("SoundingType",
+                          "The type of sounding to be used",
+                          UintegerValue(2),
+                          MakeUintegerAccessor(&RrMultiUserScheduler::m_soundingType),
+                          MakeUintegerChecker<uint8_t>(0, 2));
     return tid;
 }
 
 RrMultiUserScheduler::RrMultiUserScheduler()
+    // attempt to add Channel Sounding from ns3.37 : modification in constructor for initial values
+    : m_nssPerSta(1),
+      m_csStart(false)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -148,7 +183,45 @@ RrMultiUserScheduler::SelectTxFormat()
 {
     NS_LOG_FUNCTION(this);
 
+    // attempt to add Channel Sounding from ns3.37 : add new TxFormat for channel sounding
+    TxFormat txformatCs;
+
     Ptr<const WifiMpdu> mpdu = m_edca->PeekNextMpdu(m_linkId);
+    // if (mpdu)
+    if (IsPCFEnabled() && m_enableMuMimo)
+    {
+        // attempt to modify MU-MIMO for 11bf : add new TxFormat selector for Polling phase
+        if (mpdu && mpdu->GetHeader().IsCfPoll())
+        // if (mpdu)
+        {
+            if (IsChannelSoundingEnabled())
+            {
+                if (m_soundingType == SU_only)
+                {
+                    if (GetLastTxFormat(0U) == BF_POLL_DL_TX)
+                    {
+                        return TryNDPASoundingPhase11bf();
+                    }
+                    else if (GetLastTxFormat(0U) == BF_NDPA_SOUNDING_TX_SU)
+                    {
+                        if (m_nextSUSounding)
+                        {
+                            return TryNDPASoundingPhase11bf();
+                        }
+                        else
+                        {
+                            return TryPollingPhase11bf();
+                        }
+                    }
+                }
+                else if (GetLastTxFormat(0U) == BF_POLL_DL_TX)
+                {
+                    return TryNDPASoundingPhase11bf();
+                }
+            }
+            return TryPollingPhase11bf();
+        }
+    }
 
     if (mpdu && !m_apMac->GetHeSupported(mpdu->GetHeader().GetAddr1()))
     {
@@ -545,7 +618,6 @@ RrMultiUserScheduler::NotifyStationAssociated(uint16_t aid, Mac48Address address
 
     auto mldOrLinkAddress = m_apMac->GetMldOrLinkAddressByAid(aid);
     NS_ASSERT_MSG(mldOrLinkAddress, "AID " << aid << " not found");
-
     for (auto& staList : m_staListDl)
     {
         // if this is not the first STA of a non-AP MLD to be notified, an entry
@@ -956,6 +1028,1390 @@ MultiUserScheduler::UlMuInfo
 RrMultiUserScheduler::ComputeUlMuInfo()
 {
     return UlMuInfo{m_trigger, m_triggerMacHdr, std::move(m_txParams)};
+}
+
+/*
+*************************************
+Attempt to add Channel Sounding from ns3.37
+Private Functions for RR Multi User Scheduler
+*************************************
+*/
+
+MultiUserScheduler::TxFormat
+RrMultiUserScheduler::TryChannelSounding(void)
+{
+    NS_LOG_FUNCTION(this);
+
+    m_candidates.clear();
+    m_candidatesCs.clear();
+
+    Ptr<HeConfiguration> heConfiguration = m_apMac->GetHeConfiguration();
+    NS_ASSERT(heConfiguration != 0);
+
+    // Set the number of rows in a compressed beamforming feedback matrix
+    uint8_t nr = m_apMac->GetWifiPhy()->GetNumberOfAntennas();
+
+    //  NDPA header
+    CtrlNdpaHeader ndpaCtrlHeader;
+    Ptr<Packet> packetNdpa = Create<Packet>();
+
+    WifiMacHeader hdrNdpa(WIFI_MAC_CTL_NDPA);
+    Mac48Address receiver = Mac48Address::GetBroadcast();
+    hdrNdpa.SetAddr1(receiver);
+    hdrNdpa.SetAddr2(m_apMac->GetAddress());
+    hdrNdpa.SetDsNotTo();
+    hdrNdpa.SetDsNotFrom();
+
+    // NDP header
+    Ptr<Packet> packetNdp = Create<Packet>();
+    Ptr<WifiMpdu> mpduNdp;
+    WifiMacHeader hdrNdp = hdrNdpa;
+    hdrNdp.SetType(WIFI_MAC_DATA_NULL);
+    mpduNdp = Create<WifiMpdu>(packetNdp, hdrNdp);
+
+    // BFRP trigger header
+    Ptr<Packet> packetTf;
+    Ptr<WifiMpdu> mpduTf;
+    WifiMacHeader hdrBfTrigger = hdrNdpa;
+    hdrBfTrigger.SetType(WIFI_MAC_CTL_TRIGGER);
+
+    // Tx Vectors -- NDPA, BFRP trigger
+    WifiTxParameters txParamsCtrlFrame, txParamsNdpa, txParamsSendTf;
+    txParamsCtrlFrame.m_txVector =
+        m_apMac->GetWifiRemoteStationManager(m_linkId)->GetRtsTxVector(receiver);
+    txParamsCtrlFrame.m_txVector.SetBssColor(heConfiguration->GetBssColor());
+    txParamsCtrlFrame.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+    txParamsCtrlFrame.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection());
+
+    txParamsNdpa = txParamsCtrlFrame;
+    txParamsSendTf = txParamsCtrlFrame;
+
+    // Tx Vectors -- NDP
+    WifiTxParameters txParamsNdp;
+    WifiMode modeNdp("HeMcs0");
+    txParamsNdp.m_txVector.SetMode(modeNdp);
+    txParamsNdp.m_txVector.SetNTx(m_apMac->GetWifiPhy()->GetNumberOfAntennas());
+    txParamsNdp.m_txVector.SetNss(nr);
+    txParamsNdp.m_txVector.SetPreambleType(WIFI_PREAMBLE_HE_SU);
+    txParamsNdp.m_txVector.SetChannelWidth(m_allowedWidth);
+    txParamsNdp.m_txVector.SetBssColor(heConfiguration->GetBssColor());
+    txParamsNdp.m_txVector.SetGuardInterval(800);
+    txParamsNdp.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+    txParamsNdp.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection());
+
+    AcIndex primaryAc = m_edca->GetAccessCategory();
+
+    if (m_staListDl[primaryAc].empty())
+    {
+        return TxFormat::NO_TX;
+    }
+
+    std::size_t maxCount = m_staListDl[primaryAc].size();
+
+    uint8_t currTid = wifiAcList.at(primaryAc).GetHighTid();
+    Ptr<const WifiMpdu> mpdu = m_edca->PeekNextMpdu(SINGLE_LINK_OP_ID);
+    if (mpdu != nullptr && mpdu->GetHeader().IsQosData())
+    {
+        currTid = mpdu->GetHeader().GetQosTid();
+    }
+
+    // determine the list of TIDs to check
+    std::vector<uint8_t> tids;
+
+    if (m_enableTxopSharing)
+    {
+        for (auto acIt = wifiAcList.find(primaryAc); acIt != wifiAcList.end(); acIt++)
+        {
+            uint8_t firstTid = (acIt->first == primaryAc ? currTid : acIt->second.GetHighTid());
+            tids.push_back(firstTid);
+            tids.push_back(acIt->second.GetOtherTid(firstTid));
+        }
+    }
+    else
+    {
+        tids.push_back(currTid);
+    }
+
+    Time actualAvailableTime = (m_initialFrame ? Time::Min() : m_availableTime);
+
+    auto staIt = m_staListDl[primaryAc].begin();
+
+    std::list<Mac48Address> staMacAddrList;
+
+    // check NDP duration
+    if (!GetHeFem(m_linkId)->TryAddMpdu(mpduNdp, txParamsNdp, actualAvailableTime))
+    {
+        NS_LOG_DEBUG("Remaining TXOP duration is not enough for NDP in channel sounding");
+        return NO_TX;
+    }
+
+    NS_LOG_DEBUG("NDP duration:" << txParamsNdp.m_txDuration.GetMicroSeconds());
+
+    actualAvailableTime =
+        actualAvailableTime - txParamsNdp.m_txDuration - m_apMac->GetWifiPhy()->GetSifs();
+    if (actualAvailableTime.IsNegative())
+    {
+        NS_LOG_DEBUG("Remaining TXOP duration is not enough for channel sounding");
+        return NO_TX;
+    }
+
+    while (staIt != m_staListDl[primaryAc].end() && m_candidatesCs.size() < maxCount)
+    {
+        NS_LOG_DEBUG("Next candidate STA (MAC=" << staIt->address << ", AID=" << staIt->aid << ")");
+
+        // check if the AP has at least one frame to be sent to the current station
+        for (uint8_t tid : tids)
+        {
+            AcIndex ac = QosUtilsMapTidToAc(tid);
+            NS_ASSERT(ac >= primaryAc);
+
+            if (m_apMac->GetBaAgreementEstablishedAsOriginator(staIt->address, tid))
+            {
+                Ptr<WifiMpdu> mpdu =
+                    m_apMac->GetQosTxop(ac)->PeekNextMpdu(m_linkId, tid, staIt->address);
+                if (mpdu)
+                {
+                    // Create NDPA
+                    CtrlNdpaHeader ndpaCtrlHeaderCopy = ndpaCtrlHeader;
+                    ndpaCtrlHeaderCopy.AddStaInfoField();
+
+                    Ptr<Packet> packetNdpaCopy = Create<Packet>();
+                    packetNdpaCopy->AddHeader(ndpaCtrlHeaderCopy);
+
+                    Ptr<WifiMpdu> mpduNdpaCopy = Create<WifiMpdu>(packetNdpaCopy, hdrNdpa);
+
+                    txParamsNdpa = txParamsCtrlFrame;
+
+                    if (!GetHeFem(m_linkId)->TryAddMpdu(mpduNdpaCopy,
+                                                        txParamsNdpa,
+                                                        actualAvailableTime))
+                    {
+                        if (m_candidatesCs.size())
+                        {
+                            break;
+                        }
+                        else
+                        {
+                            return NO_TX;
+                        }
+                    }
+
+                    actualAvailableTime = actualAvailableTime - txParamsNdpa.m_txDuration -
+                                          m_apMac->GetWifiPhy()->GetSifs();
+                    if (actualAvailableTime.IsNegative())
+                    {
+                        if (m_candidatesCs.size())
+                        {
+                            break;
+                        }
+                        else
+                        {
+                            return NO_TX;
+                        }
+                    }
+
+                    // Create BFRP trigger
+                    WifiTxVector txVector;
+                    CtrlTriggerHeader bfTfCtrlHeader;
+                    if (m_candidatesCs.size() > 0)
+                    {
+                        txVector.SetChannelWidth(m_allowedWidth);
+                        txVector.SetPreambleType(WIFI_PREAMBLE_HE_TB);
+                        txVector.SetGuardInterval(
+                            heConfiguration->GetGuardInterval().GetNanoSeconds());
+
+                        std::size_t nRusAssigned = m_candidatesCs.size() + 1;
+                        std::size_t nCentral26TonesRus;
+                        HeRu::RuType ruType = HeRu::GetEqualSizedRusForStations(m_allowedWidth,
+                                                                                nRusAssigned,
+                                                                                nCentral26TonesRus,
+                                                                                true);
+
+                        if (!m_useCentral26TonesRus || m_candidatesCs.size() + 1 == nRusAssigned)
+                        {
+                            nCentral26TonesRus = 0;
+                        }
+                        else
+                        {
+                            nCentral26TonesRus = std::min(m_candidatesCs.size() + 1 - nRusAssigned,
+                                                          nCentral26TonesRus);
+                            NS_LOG_DEBUG(nCentral26TonesRus
+                                         << " stations are being assigned a 26-tones RU");
+                        }
+
+                        auto ruSet = HeRu::GetRusOfType(m_allowedWidth, ruType);
+                        auto ruSetIt = ruSet.begin();
+                        auto central26TonesRus = HeRu::GetCentral26TonesRus(m_allowedWidth, ruType);
+                        auto central26TonesRusIt = central26TonesRus.begin();
+
+                        WifiMacHeader hdr;
+                        hdr.SetType(WIFI_MAC_QOSDATA);
+                        hdr.SetAddr2(m_apMac->GetAddress());
+                        hdr.SetDsNotTo();
+                        hdr.SetDsNotFrom();
+
+                        auto candidateIt = m_candidatesCs.begin();
+
+                        WifiMode csMode;
+                        for (std::size_t i = 0; i < nRusAssigned + nCentral26TonesRus - 1; i++)
+                        {
+                            hdr.SetAddr1(candidateIt->first->address);
+                            csMode = GetHeFem(m_linkId)->GetCsMode() == "0"
+                                         ? GetWifiRemoteStationManager(m_linkId)
+                                               ->GetDataTxVector(hdr, m_allowedWidth)
+                                               .GetMode()
+                                         : WifiMode(GetHeFem(m_linkId)->GetCsMode());
+                            txVector.SetHeMuUserInfo(
+                                candidateIt->first->aid,
+                                {(i < nRusAssigned ? *ruSetIt++ : *central26TonesRusIt++),
+                                 csMode.GetMcsValue(),
+                                 1});
+                            candidateIt++;
+                        }
+                        hdr.SetAddr1(staIt->address);
+                        csMode = GetHeFem(m_linkId)->GetCsMode() == "0"
+                                     ? GetWifiRemoteStationManager(m_linkId)
+                                           ->GetDataTxVector(hdr, m_allowedWidth)
+                                           .GetMode()
+                                     : WifiMode(GetHeFem(m_linkId)->GetCsMode());
+                        txVector.SetHeMuUserInfo(
+                            staIt->aid,
+                            {(nCentral26TonesRus == 0 ? *ruSetIt++ : *central26TonesRusIt++),
+                             csMode.GetMcsValue(),
+                             1});
+                        bfTfCtrlHeader =
+                            CtrlTriggerHeader(TriggerFrameType::BFRP_TRIGGER, txVector);
+                        mpduTf = GetTriggerFrame(bfTfCtrlHeader, m_linkId);
+                        txParamsSendTf = txParamsCtrlFrame;
+                        if (!GetHeFem(m_linkId)->TryAddMpdu(mpduTf,
+                                                            txParamsSendTf,
+                                                            actualAvailableTime))
+                        {
+                            break;
+                        }
+
+                        actualAvailableTime = actualAvailableTime - txParamsSendTf.m_txDuration -
+                                              m_apMac->GetWifiPhy()->GetSifs();
+                        if (actualAvailableTime.IsNegative())
+                        {
+                            break;
+                        }
+                    }
+
+                    // Beamforming report duration
+                    HeMimoControlHeader::CsType type;
+                    Time maxBfDuration = Time(0);
+                    if (m_candidatesCs.size() == 0)
+                    {
+                        type = HeMimoControlHeader::SU;
+                        WifiMacHeader hdr(WIFI_MAC_QOSDATA);
+                        hdr.SetAddr1(m_apMac->GetAddress());
+                        hdr.SetAddr2(staIt->address);
+                        txVector = m_apMac->GetWifiRemoteStationManager(m_linkId)->GetDataTxVector(
+                            hdr,
+                            m_allowedWidth);
+                    }
+                    else
+                    {
+                        type = HeMimoControlHeader::MU;
+                    }
+
+                    uint8_t ng, codeBookSize;
+                    uint16_t numBytes;
+                    auto candidateIt = m_candidatesCs.begin();
+                    while (candidateIt != m_candidatesCs.end())
+                    {
+                        ng = m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                 ->GetStationHeCapabilities(candidateIt->first->address)
+                                 ->GetNgforMuFeedback();
+                        codeBookSize = (m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                            ->GetStationHeCapabilities(candidateIt->first->address)
+                                            ->GetCodebookSizeforMu() == "(9,7)");
+
+                        uint8_t ncBf =
+                            1 + m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                    ->GetStationHeCapabilities(candidateIt->first->address)
+                                    ->GetMaxNc();
+                        numBytes = ChannelSounding::GetBfReportLength(m_allowedWidth,
+                                                                      ng,
+                                                                      ncBf,
+                                                                      nr,
+                                                                      codeBookSize,
+                                                                      type);
+                        maxBfDuration =
+                            Max(maxBfDuration,
+                                WifiPhy::CalculateTxDuration(numBytes,
+                                                             txVector,
+                                                             m_apMac->GetWifiPhy()->GetPhyBand(),
+                                                             candidateIt->first->aid));
+                        candidateIt++;
+                    }
+                    if (type == HeMimoControlHeader::SU)
+                    {
+                        ng = m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                 ->GetStationHeCapabilities(staIt->address)
+                                 ->GetNgforSuFeedback();
+                        codeBookSize = (m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                            ->GetStationHeCapabilities(staIt->address)
+                                            ->GetCodebookSizeforSu() == "(6,4)");
+                    }
+                    else
+                    {
+                        ng = m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                 ->GetStationHeCapabilities(staIt->address)
+                                 ->GetNgforMuFeedback();
+                        codeBookSize = (m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                            ->GetStationHeCapabilities(staIt->address)
+                                            ->GetCodebookSizeforMu() == "(9,7)");
+                    }
+
+                    uint8_t ncBf = 1 + m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                           ->GetStationHeCapabilities(staIt->address)
+                                           ->GetMaxNc();
+
+                    numBytes = ChannelSounding::GetBfReportLength(m_allowedWidth,
+                                                                  ng,
+                                                                  ncBf,
+                                                                  nr,
+                                                                  codeBookSize,
+                                                                  type);
+                    maxBfDuration =
+                        Max(maxBfDuration,
+                            WifiPhy::CalculateTxDuration(numBytes,
+                                                         txVector,
+                                                         m_apMac->GetWifiPhy()->GetPhyBand(),
+                                                         staIt->aid));
+
+                    // Duration of DL MU MIMO transmission
+                    if (maxBfDuration < actualAvailableTime)
+                    {
+                        m_candidatesCs.push_back({staIt, mpdu});
+                        staMacAddrList.push_back(staIt->address);
+                        ndpaCtrlHeader = ndpaCtrlHeaderCopy;
+                        GetHeFem(m_linkId)->GetCsBeamformer()->SetTxParameters(txParamsNdpa,
+                                                                               "NDPA");
+                        if (m_candidatesCs.size() > 1)
+                        {
+                            GetHeFem(m_linkId)->GetCsBeamformer()->SetTxParameters(txParamsSendTf,
+                                                                                   "Trigger");
+                            uint16_t ulLength;
+                            std::tie(ulLength, maxBfDuration) =
+                                HePhy::ConvertHeTbPpduDurationToLSigLength(
+                                    maxBfDuration,
+                                    txVector,
+                                    m_apMac->GetWifiPhy()->GetPhyBand());
+                            bfTfCtrlHeader.SetUlLength(ulLength);
+                            GetHeFem(m_linkId)->GetCsBeamformer()->SetBeamformerFrames(
+                                GetTriggerFrame(bfTfCtrlHeader, m_linkId),
+                                "Trigger");
+                        }
+                        break;
+                    }
+                }
+                else
+                {
+                    NS_LOG_DEBUG("No frames to send to " << staIt->address << " with TID=" << +tid);
+                }
+            }
+            else
+            {
+                NS_LOG_DEBUG(
+                    "STA:"
+                    << staIt->address << " with TID=" << +tid
+                    << "No BA agreement is established with the receiver for the considered TID");
+            }
+        }
+
+        // move to the next station in the list
+        staIt++;
+    }
+
+    if (m_candidatesCs.empty())
+    {
+        return NO_TX;
+    }
+    else
+    {
+        GetHeFem(m_linkId)->GetCsBeamformer()->GenerateNdpaFrame(
+            m_apMac->GetAddress(),
+            staMacAddrList,
+            m_allowedWidth,
+            GetWifiRemoteStationManager(m_linkId));
+
+        if (GetHeFem(m_linkId)->GetCsBeamformer()->GetNumCsStations() == 1)
+        {
+            receiver = *staMacAddrList.begin();
+        }
+        else
+        {
+            receiver = Mac48Address::GetBroadcast();
+        }
+        hdrNdp.SetAddr1(receiver);
+        mpduNdp = Create<WifiMpdu>(packetNdp, hdrNdp);
+        GetHeFem(m_linkId)->GetCsBeamformer()->SetBeamformerFrames(mpduNdp, "NDP");
+        GetHeFem(m_linkId)->GetCsBeamformer()->SetTxParameters(txParamsNdp, "NDP");
+
+        NS_LOG_DEBUG("Number of stations scheduled in channel sounding"
+                     << GetHeFem(m_linkId)->GetCsBeamformer()->GetNumCsStations());
+
+        return TxFormat::CS_TX;
+    }
+}
+
+bool
+RrMultiUserScheduler::IsChannelSoundingEnabled()
+{
+    return !m_csInterval.IsZero() && m_apMac->GetChannelSoundingSupported();
+}
+
+/*
+ *************************************
+ Attempt to modify MU-MIMO from ns3.40
+ Private Functions and Attributes for RR Multi User Scheduler
+ *************************************
+*/
+
+bool
+RrMultiUserScheduler::IsPCFEnabled()
+{
+    return m_apMac->GetPcfSupported();
+}
+
+MultiUserScheduler::TxFormat
+RrMultiUserScheduler::TryPollingPhase11bf()
+{
+    NS_LOG_FUNCTION(this);
+    bool m_bPollDlMu = false;
+    bool m_bPollUlMu = false;
+    Ptr<HeConfiguration> heConfiguration = m_apMac->GetHeConfiguration();
+    NS_ASSERT(heConfiguration != 0);
+
+    // Clear candidates for NDPA Sounding Phase
+    m_candidatesCs.clear();
+    m_candidatesCsSU.clear();
+    
+    /*
+    ********************************************************************
+    Trying downlink MU transmission for polling phase
+    ********************************************************************
+    */
+
+    //  Polling Frame header --------------------------------------------------
+    WifiMacHeader pollingFrame;
+    Ptr<Packet> packetPollingFrame = Create<Packet>();
+    pollingFrame.SetType(WIFI_MAC_QOSDATA_CFPOLL);
+    pollingFrame.SetNoRetry();
+    pollingFrame.SetAddr2(m_apMac->GetAddress());
+    pollingFrame.SetDsNotTo();
+    pollingFrame.SetDsNotFrom();
+    pollingFrame.SetQosAckPolicy(ns3::WifiMacHeader::QosAckPolicy::NO_ACK);
+
+    // Tx Vectors & Params -- Polling Frame --------------------------------------------------
+    WifiTxParameters txParamsPollingFrame;
+    WifiMode modetxParamsPollingFrame("HeMcs0");
+    txParamsPollingFrame.m_txVector.SetMode(modetxParamsPollingFrame);
+    txParamsPollingFrame.m_txVector.SetNTx(m_apMac->GetWifiPhy()->GetNumberOfAntennas());
+    txParamsPollingFrame.m_txVector.SetNss(m_apMac->GetWifiPhy()->GetNumberOfAntennas());
+    txParamsPollingFrame.m_txVector.SetPreambleType(WIFI_PREAMBLE_HE_SU);
+    txParamsPollingFrame.m_txVector.SetChannelWidth(m_allowedWidth);
+    txParamsPollingFrame.m_txVector.SetBssColor(heConfiguration->GetBssColor());
+    txParamsPollingFrame.m_txVector.SetGuardInterval(
+        heConfiguration->GetGuardInterval().GetNanoSeconds());
+    txParamsPollingFrame.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+    txParamsPollingFrame.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection());
+
+    //  Check capability of DL MU  --------------------------------------------------
+    AcIndex primaryAc = m_edca->GetAccessCategory();
+    if (m_staListDl[primaryAc].empty())
+    {
+        SensingTimeout();
+        return TxFormat::SU_TX;
+    }
+
+    // OFDMA variables
+    std::size_t nCentral26TonesRus;
+    HeRu::RuType ruType;
+    std::size_t count;
+    std::size_t maxCount;
+
+    if (!m_useCentral26TonesRus)
+    {
+        nCentral26TonesRus = 0;
+    }
+    // count = std::min(static_cast<std::size_t>(m_nStations), m_staListDl[primaryAc].size());
+    // maxCount = std::min(static_cast<std::size_t>(m_nStations), count + nCentral26TonesRus);
+    maxCount = m_staListDl[primaryAc].size();
+    ruType = HeRu::GetEqualSizedRusForStations(m_allowedWidth, maxCount, nCentral26TonesRus, true);
+    NS_ASSERT(maxCount >= 1);
+
+    uint8_t currTid = wifiAcList.at(primaryAc).GetHighTid();
+
+    // determine the list of TIDs to check
+    std::vector<uint8_t> tids;
+
+    if (m_enableTxopSharing)
+    {
+        for (auto acIt = wifiAcList.find(primaryAc); acIt != wifiAcList.end(); acIt++)
+        {
+            uint8_t firstTid = (acIt->first == primaryAc ? currTid : acIt->second.GetHighTid());
+            tids.push_back(firstTid);
+            tids.push_back(acIt->second.GetOtherTid(firstTid));
+        }
+    }
+    else
+    {
+        tids.push_back(currTid);
+    }
+
+    std::list<Mac48Address> staMacAddrList;
+
+    // The TXOP limit can be exceeded by the TXOP holder if it does not transmit more
+    // than one Data or Management frame in the TXOP and the frame is not in an A-MPDU
+    // consisting of more than one MPDU (Sec. 10.22.2.8 of 802.11-2016).
+    // For the moment, we are considering just one MPDU per receiver.
+    // Time actualAvailableTime = (m_initialFrame ? Time::Min() : m_availableTime);
+    if (!(std::min(m_availableTime, m_availableTime)).IsStrictlyPositive())
+        m_availableTime = Seconds(0);
+    Time actualAvailableTime = (m_initialFrame ? Time::Min() : m_availableTime);
+    // iterate over the associated stations until an enough number of stations is identified
+    auto staIt = m_staListDl[primaryAc].begin();
+    m_candidatesPoll.clear();
+
+    // OFDMA variables
+    std::vector<uint8_t> ruAllocations;
+    uint16_t numRuAllocs = txParamsPollingFrame.m_txVector.GetChannelWidth() / 20;
+    ruAllocations.resize(numRuAllocs);
+    NS_ASSERT((m_candidatesPoll.size() % numRuAllocs) == 0);
+
+    while (staIt != m_staListDl[primaryAc].end() && m_candidatesPoll.size() < maxCount)
+    {
+        NS_LOG_DEBUG("Next candidate STA (MAC=" << staIt->address << ", AID=" << staIt->aid << ")");
+        if (txParamsPollingFrame.m_txVector.GetPreambleType() == WIFI_PREAMBLE_EHT_MU &&
+            !m_apMac->GetEhtSupported(staIt->address))
+        {
+            NS_LOG_DEBUG("Skipping non-EHT STA because this DL MU PPDU is sent to EHT STAs only");
+            staIt++;
+            continue;
+        }
+
+        // attempt to add channel sounding from ns3.37 : modification in TrySendingDlMuPpdu for
+        // current resource allocation setup
+        HeRu::RuType currRuType;
+
+        // OFDMA
+        // currRuType = (m_candidates.size() < count ? ruType : HeRu::RU_26_TONE);
+        currRuType = (m_candidatesPoll.size() < maxCount ? ruType : HeRu::RU_26_TONE);
+        pollingFrame.SetAddr1(staIt->address);
+        Ptr<WifiMpdu> mpdu = Create<WifiMpdu>(packetPollingFrame, pollingFrame);
+        // check if the AP has at least one frame to be sent to the current station
+        if (mpdu)
+        {
+            mpdu = GetHeFem(m_linkId)->CreateAliasIfNeeded(mpdu);
+            // Use a temporary TX vector including only the STA-ID of the
+            // candidate station to check if the MPDU meets the size and time limits.
+            // An RU of the computed size is tentatively assigned to the candidate
+            // station, so that the TX duration can be correctly computed.
+            WifiTxVector suTxVector =
+                GetWifiRemoteStationManager(m_linkId)->GetDataTxVector(mpdu->GetHeader(),
+                                                                       m_allowedWidth);
+
+            WifiTxVector txVectorCopy = txParamsPollingFrame.m_txVector;
+            txParamsPollingFrame.m_txVector.SetPreambleType(WIFI_PREAMBLE_HE_MU);
+            txParamsPollingFrame.m_txVector.SetHeMuUserInfo(
+                staIt->aid,
+                {{currRuType, 1, true},
+                 suTxVector.GetMode().GetMcsValue(),
+                 m_apMac->GetWifiPhy()->GetNumberOfAntennas()});
+
+            txParamsPollingFrame.m_acknowledgment =
+                std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+            txParamsPollingFrame.m_protection =
+                std::unique_ptr<WifiProtection>(new WifiNoProtection());
+            mpdu->GetHeader().SetQosTid( wifiAcList.find(m_edca->GetAccessCategory())->first);
+            if (!GetHeFem(m_linkId)->TryAddMpdu(mpdu, txParamsPollingFrame, actualAvailableTime))
+            {
+                NS_LOG_DEBUG("Adding the peeked frame violates the time constraints");
+                txParamsPollingFrame.m_txVector = txVectorCopy;
+            }
+            else
+            {
+                // the frame meets the constraints
+                NS_LOG_DEBUG("Adding candidate STA (MAC=" << staIt->address
+                                                          << ", AID=" << staIt->aid);
+                m_candidatesPoll.emplace_back(staIt, mpdu);
+            }
+        }
+        else
+        {
+            NS_LOG_DEBUG("No frames to send to " << staIt->address);
+        }
+
+        // move to the next station in the list
+        staIt++;
+    }
+
+    actualAvailableTime =
+        actualAvailableTime - txParamsPollingFrame.m_txDuration - m_apMac->GetWifiPhy()->GetSifs();
+
+    if (m_candidatesPoll.empty())
+    {
+        SensingTimeout();
+        return NO_TX;
+    }
+    // else if (m_candidatesPoll.size() == 1)
+    // {
+    //     // return SU_TX;
+    //     m_txParams = txParamsPollingFrame;
+    //     m_txParams.m_txVector = txParamsPollingFrame.m_txVector;
+    //     m_bPollDlMu = true;
+    //     return TxFormat::BF_POLL_DL_TX;
+    // }
+    else
+    {
+        m_txParams = txParamsPollingFrame;
+        m_txParams.m_txVector = txParamsPollingFrame.m_txVector;
+        m_bPollDlMu = true;
+    }
+
+    /*
+    ********************************************************************
+    Trying uplink MU transmission for polling phase
+    ********************************************************************
+    */
+    // Tx Vectors & Params -- BSRP trigger --------------------------------------------------
+    WifiTxVector txVector = GetTxVectorForUlMu([this](const MasterInfo& info) {
+        const auto& staList = m_apMac->GetStaList(m_linkId);
+        return staList.find(info.aid) != staList.cend();
+    });
+
+    // BSRP Trigger header --------------------------------------------------
+    Ptr<Packet> packetTf;
+    Ptr<WifiMpdu> mpduTf;
+    CtrlTriggerHeader pollTfCtrlHeader;
+    WifiMacHeader hdrPollTrigger(WIFI_MAC_CTL_TRIGGER);
+    hdrPollTrigger.SetAddr1(Mac48Address::GetBroadcast());
+    hdrPollTrigger.SetAddr2(GetHeFem(0U)->GetAddress());
+    hdrPollTrigger.SetDsNotTo();
+    hdrPollTrigger.SetDsNotFrom();
+    hdrPollTrigger.SetQosAckPolicy(ns3::WifiMacHeader::QosAckPolicy::NO_ACK);
+    // only consider stations that have setup the current link
+
+    // CTS-to-Self header --------------------------------------------------
+    WifiMacHeader ctsToSelf;
+    Ptr<Packet> packetCtsToSelf = Create<Packet>();
+    ctsToSelf.SetType(WIFI_MAC_CTL_CTS);
+    ctsToSelf.SetDsNotFrom();
+    ctsToSelf.SetDsNotTo();
+    ctsToSelf.SetNoMoreFragments();
+    ctsToSelf.SetNoRetry();
+    ctsToSelf.SetAddr1(m_apMac->GetAddress());
+
+    WifiTxVector ctsTxVector =
+        m_apMac->GetWifiRemoteStationManager(0U)->GetRtsTxVector(m_apMac->GetAddress());
+
+    WifiTxParameters txParamsCtrlFrame, txParamsSendTf;
+    txParamsSendTf.m_txVector = txVector;
+    txParamsSendTf.m_txVector.SetBssColor(heConfiguration->GetBssColor());
+    txParamsSendTf.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+    txParamsSendTf.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection());
+
+    auto pollingStaIt = m_candidatesPoll.begin();
+    if (m_candidatesPoll.size() > 0)
+    {
+        while (pollingStaIt != m_candidatesPoll.end())
+        {
+            txParamsSendTf.m_txVector.SetChannelWidth(m_allowedWidth);
+            txParamsSendTf.m_txVector.SetPreambleType(WIFI_PREAMBLE_HE_TB);
+            txParamsSendTf.m_txVector.SetGuardInterval(
+                heConfiguration->GetGuardInterval().GetNanoSeconds());
+
+            std::size_t nRusAssigned = m_candidatesPoll.size() + 1;
+            std::size_t nCentral26TonesRus;
+            HeRu::RuType ruType = HeRu::GetEqualSizedRusForStations(m_allowedWidth,
+                                                                    nRusAssigned,
+                                                                    nCentral26TonesRus,
+                                                                    true);
+
+            if (!m_useCentral26TonesRus || m_candidatesPoll.size() + 1 == nRusAssigned)
+            {
+                nCentral26TonesRus = 0;
+            }
+            else
+            {
+                nCentral26TonesRus =
+                    std::min(m_candidatesPoll.size() + 1 - nRusAssigned, nCentral26TonesRus);
+                NS_LOG_DEBUG(nCentral26TonesRus << " stations are being assigned a 26-tones RU");
+            }
+
+            auto ruSet = HeRu::GetRusOfType(m_allowedWidth, ruType);
+            auto ruSetIt = ruSet.begin();
+            auto central26TonesRus = HeRu::GetCentral26TonesRus(m_allowedWidth, ruType);
+            auto central26TonesRusIt = central26TonesRus.begin();
+
+            WifiMode pollUlMode;
+            for (std::size_t i = 0; i > nRusAssigned + nCentral26TonesRus - 1; i++)
+            {
+                pollingFrame.SetAddr1(pollingStaIt->first->address);
+                txParamsSendTf.m_txVector.SetHeMuUserInfo(
+                    pollingStaIt->first->aid,
+                    // {(i < nRusAssigned ? *ruSetIt++ : *central26TonesRusIt++),
+                    //  ctsTxVector.GetMode().GetMcsValue(),
+                    //  1});
+                    {(i < nRusAssigned ? *ruSetIt++ : *central26TonesRusIt++),
+                     modetxParamsPollingFrame.GetMcsValue(),
+                     ctsTxVector.GetNss()});
+                pollingStaIt++;
+            }
+
+            pollingFrame.SetAddr1(pollingStaIt->first->address);
+            txParamsSendTf.m_txVector.SetHeMuUserInfo(
+                pollingStaIt->first->aid,
+                // {(nCentral26TonesRus == 0 ? *ruSetIt++ : *central26TonesRusIt++),
+                //  ctsTxVector.GetMode().GetMcsValue(),
+                //  1});
+                //  (
+                // pollingStaIt->first->aid,
+                {(nCentral26TonesRus == 0 ? *ruSetIt++ : *central26TonesRusIt++),
+                 modetxParamsPollingFrame.GetMcsValue(),
+                 ctsTxVector.GetNss()});
+
+            // Get the trigger header frame
+            pollTfCtrlHeader =
+                CtrlTriggerHeader(TriggerFrameType::BSRP_TRIGGER, txParamsSendTf.m_txVector);
+            mpduTf = GetTriggerFrame(pollTfCtrlHeader, m_linkId);
+
+            pollingStaIt++;
+        }
+
+        uint8_t maxNTids = 0;
+
+        uint32_t headerSize = ctsToSelf.GetSerializedSize();
+        uint32_t maxSize = 0;
+
+        for (uint8_t i = 0; i < maxNTids; i++)
+        {
+            maxSize =
+                MpduAggregator::GetSizeIfAggregated(headerSize + WIFI_MAC_FCS_LENGTH, maxSize);
+        }
+
+        actualAvailableTime = Seconds(0);
+        for (const auto& userInfo : pollTfCtrlHeader)
+        {
+            Time duration = WifiPhy::CalculateTxDuration(maxSize,
+                                                         txParamsSendTf.m_txVector,
+                                                         m_apMac->GetWifiPhy()->GetPhyBand(),
+                                                         userInfo.GetAid12());
+            actualAvailableTime = Max(actualAvailableTime, duration);
+        }
+
+        // actualAvailableTime =
+        //     actualAvailableTime - txParamsSendTf.m_txDuration - m_apMac->GetWifiPhy()->GetSifs();
+
+        m_triggerUlPoll = pollTfCtrlHeader;
+        m_macHdrTriggerUlPoll = hdrPollTrigger;
+        m_txParamsTriggerUlPoll = txParamsSendTf;
+
+        m_triggerUlPoll =
+            CtrlTriggerHeader(TriggerFrameType::BSRP_TRIGGER, txParamsSendTf.m_txVector);
+        txVector.SetGuardInterval(m_trigger.GetGuardInterval());
+
+        auto item = GetTriggerFrame(m_triggerUlPoll, m_linkId);
+        m_macHdrTriggerUlPoll = item->GetHeader();
+
+        // m_txParamsTriggerUlPoll.Clear();
+        // set the TXVECTOR used to send the Trigger Frame
+        m_txParamsTriggerUlPoll.m_txVector =
+            m_apMac->GetWifiRemoteStationManager(m_linkId)->GetRtsTxVector(
+                m_triggerMacHdr.GetAddr1());
+
+        u_int16_t ulLength;
+        std::tie(ulLength, actualAvailableTime) = HePhy::ConvertHeTbPpduDurationToLSigLength(
+            actualAvailableTime,
+            m_triggerUlPoll.GetHeTbTxVector(m_triggerUlPoll.begin()->GetAid12()),
+            m_apMac->GetWifiPhy()->GetPhyBand());
+        m_triggerUlPoll.SetUlLength(ulLength);
+
+        m_bPollUlMu = true;
+    }
+
+    if (IsChannelSoundingEnabled() &&
+        GetHeFem(m_linkId)->GetCsBeamformer()->CheckChannelSounding(m_csInterval))
+    {
+        m_csStart = true;
+        GetHeFem(m_linkId)->GetCsBeamformer()->ClearAllInfo();
+
+        // if (txformatCs == CS_TX)
+        // {
+        //     GetHeFem(m_linkId)->GetCsBeamformer()->SetLastCsTime(Simulator::Now());
+        //     return txformatCs;
+        // }
+    }
+    // m_csStart = true;
+    // GetHeFem(m_linkId)->GetCsBeamformer()->ClearAllInfo();
+
+    if (m_bPollDlMu && m_bPollUlMu)
+    {
+        return TxFormat::BF_POLL_DL_TX;
+    }
+    else
+    {
+        SensingTimeout();
+        return NO_TX;
+    }
+}
+
+MultiUserScheduler::PollingMuInfo
+RrMultiUserScheduler::ComputePollMuInfo()
+{
+    NS_LOG_FUNCTION(this);
+    if (m_candidatesPoll.empty())
+    {
+        return PollingMuInfo();
+    }
+
+    m_candidates = m_candidatesPoll;
+    PollingMuInfo pollMuInfo;
+
+    Ptr<WifiMpdu> mpdu;
+    pollMuInfo.txParams.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+    std::swap(pollMuInfo.txParams.m_txVector, m_txParams.m_txVector);
+    std::swap(pollMuInfo.txParamsTriggerUlPoll, m_txParamsTriggerUlPoll);
+    std::swap(pollMuInfo.macHdrTriggerUlPoll, m_macHdrTriggerUlPoll);
+    std::swap(pollMuInfo.triggerUlPoll, m_triggerUlPoll);
+    // FinalizeTxVector(pollMuInfo.txParams.m_txVector);
+    NS_ASSERT(pollMuInfo.txParams.m_txVector.GetHeMuUserInfoMap().size() ==
+              m_candidatesPoll.size());
+
+    // compute how many stations can be granted an RU and the RU size
+    std::size_t nRusAssigned = m_candidatesPoll.size();
+    std::size_t nCentral26TonesRus;
+    HeRu::RuType ruType =
+        HeRu::GetEqualSizedRusForStations(m_allowedWidth, nRusAssigned, nCentral26TonesRus, true);
+
+    NS_LOG_DEBUG(nRusAssigned << " stations are being assigned a " << ruType << " RU");
+
+    if (!m_useCentral26TonesRus || m_candidatesPoll.size() == nRusAssigned)
+    {
+        nCentral26TonesRus = 0;
+    }
+    else
+    {
+        nCentral26TonesRus = std::min(m_candidatesPoll.size() - nRusAssigned, nCentral26TonesRus);
+        NS_LOG_DEBUG(nCentral26TonesRus << " stations are being assigned a 26-tones RU");
+    }
+
+    // re-allocate RUs based on the actual number of candidate stations
+    WifiTxVector::HeMuUserInfoMap heMuUserInfoMap;
+    std::swap(heMuUserInfoMap, pollMuInfo.txParams.m_txVector.GetHeMuUserInfoMap());
+
+    auto candidateIt = m_candidatesPoll.begin(); // iterator over the list of candidate receivers
+    auto ruSet = HeRu::GetRusOfType(m_allowedWidth, ruType);
+    auto ruSetIt = ruSet.begin();
+    auto central26TonesRus = HeRu::GetCentral26TonesRus(m_allowedWidth, ruType);
+    auto central26TonesRusIt = central26TonesRus.begin();
+    for (std::size_t i = 0; i < nRusAssigned + nCentral26TonesRus; i++)
+    {
+        NS_ASSERT(candidateIt != m_candidates.end());
+        auto mapIt = heMuUserInfoMap.find(candidateIt->first->aid);
+        NS_ASSERT(mapIt != heMuUserInfoMap.end());
+
+        pollMuInfo.txParams.m_txVector.SetHeMuUserInfo(
+            mapIt->first,
+            {(i < nRusAssigned ? *ruSetIt++ : *central26TonesRusIt++),
+             mapIt->second.mcs,
+             mapIt->second.nss});
+        candidateIt++;
+    }
+
+    // FinalizeTxVector(pollMuInfo.txParamsTriggerUlPoll.m_txVector);
+
+    // Compute the TX params (again) by using the stored MPDUs and the final TXVECTOR
+    Time actualAvailableTime = (m_initialFrame ? Time::Min() : m_availableTime);
+    m_txParams.Clear();
+    for (const auto& candidate : m_candidatesPoll)
+    {
+        mpdu = candidate.second;
+        NS_ASSERT(mpdu);
+        NS_ASSERT_MSG(mpdu->GetOriginal()->GetHeader().GetAddr1() == candidate.first->address,
+                      "RA of the stored MPDU must match the stored address");
+        pollMuInfo.psduMap[candidate.first->aid] = Create<WifiPsdu>(candidate.second, true);
+    }
+
+    // We have to complete the PSDUs to send
+    Ptr<WifiMacQueue> queue;
+
+    AcIndex primaryAc = m_edca->GetAccessCategory();
+    // UpdateCredits(m_staListDl[primaryAc],
+    //               pollMuInfo.txParams.m_txDuration,
+    //               pollMuInfo.txParams.m_txVector);
+
+    NS_LOG_DEBUG("Next station to serve has AID=" << m_staListDl[primaryAc].front().aid);
+    return pollMuInfo;
+}
+
+void
+RrMultiUserScheduler::CheckRespondedPollingStation(Mac48Address address)
+{
+    WifiMacHeader hdrNdpa(WIFI_MAC_CTL_NDPA);
+    hdrNdpa.SetAddr1(address);
+    hdrNdpa.SetAddr2(m_apMac->GetAddress());
+    hdrNdpa.SetDsNotTo();
+    hdrNdpa.SetDsNotFrom();
+    ns3::Ptr<ns3::WifiMpdu> mpduNdpa = Create<WifiMpdu>(Create<Packet>(), hdrNdpa);
+    auto staIt = m_candidatesPoll.begin();
+    while (staIt != m_candidatesPoll.end())
+    {
+        if (staIt->first->address == address)
+        {
+            m_candidatesCs.emplace_back(staIt->first, mpduNdpa);
+            m_candidatesCsSU.emplace_back(staIt->first, mpduNdpa);
+        }
+        staIt++;
+    }
+
+    m_currentCsSUCandidate = m_candidatesCsSU.begin();
+    if (m_soundingType == SoundingType::SU_only && m_candidatesCs.size() > 1)
+    {
+        DoSUNDPASoundingStation();
+    }
+}
+
+MultiUserScheduler::TxFormat
+RrMultiUserScheduler::TryNDPASoundingPhase11bf(void)
+{
+    NS_LOG_FUNCTION(this);
+    m_candidatesReport.clear();
+    Ptr<HeConfiguration> heConfiguration = m_apMac->GetHeConfiguration();
+    NS_ASSERT(heConfiguration != 0);
+
+    if (m_soundingType == SU_and_MU)
+    {
+        Ptr<UniformRandomVariable> random_seed = CreateObject<UniformRandomVariable>();
+        int random = random_seed->GetInteger(1, m_candidatesCs.size());
+        auto m_candidateCs_copy = m_candidatesCs;
+        std::vector<int> random_index_vec;
+        m_candidatesCs.clear();
+        if (random > 1)
+        {
+            auto staIt = m_candidateCs_copy.begin();
+            for (int i = 0; i < random; i++)
+            {
+                m_candidatesCs.emplace_back(staIt->first, staIt->second);
+                staIt++;
+            }
+        }
+        else
+        {
+            auto staIt = m_candidateCs_copy.begin();
+            int random_index = random_seed->GetInteger(1, m_candidateCs_copy.size());
+            for (int i = 0; i < random_index - 1; i++)
+            {
+                staIt++;
+            }
+            m_candidatesCs.emplace_back(staIt->first, staIt->second);
+        }
+        if (m_candidatesCs.size() == 0)
+        {
+            SensingTimeout();
+            return NO_TX;
+        }
+    }
+
+    // Set the number of rows in a compressed beamforming feedback matrix
+    uint8_t nr = m_apMac->GetWifiPhy()->GetNumberOfAntennas();
+    //  NDPA header
+    CtrlNdpaHeader ndpaCtrlHeader;
+    Ptr<Packet> packetNdpa = Create<Packet>();
+
+    WifiMacHeader hdrNdpa(WIFI_MAC_CTL_NDPA);
+    Mac48Address receiver = Mac48Address::GetBroadcast();
+    hdrNdpa.SetAddr1(receiver);
+    hdrNdpa.SetAddr2(m_apMac->GetAddress());
+    hdrNdpa.SetDsNotTo();
+    hdrNdpa.SetDsNotFrom();
+
+    // NDP header
+    Ptr<Packet> packetNdp = Create<Packet>();
+    Ptr<WifiMpdu> mpduNdp;
+    WifiMacHeader hdrNdp = hdrNdpa;
+    hdrNdp.SetType(WIFI_MAC_DATA_NULL);
+    mpduNdp = Create<WifiMpdu>(packetNdp, hdrNdp);
+
+    // BFRP trigger header
+    Ptr<Packet> packetTf;
+    Ptr<WifiMpdu> mpduTf;
+    WifiMacHeader hdrBfTrigger = hdrNdpa;
+    hdrBfTrigger.SetType(WIFI_MAC_CTL_TRIGGER);
+
+    // Tx Vectors -- NDPA, BFRP trigger
+    WifiTxParameters txParamsCtrlFrame, txParamsNdpa, txParamsSendTf;
+    txParamsCtrlFrame.m_txVector =
+        m_apMac->GetWifiRemoteStationManager(m_linkId)->GetRtsTxVector(receiver);
+    txParamsCtrlFrame.m_txVector.SetBssColor(heConfiguration->GetBssColor());
+    txParamsCtrlFrame.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+    txParamsCtrlFrame.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection());
+
+    txParamsNdpa = txParamsCtrlFrame;
+    txParamsSendTf = txParamsCtrlFrame;
+
+    // Tx Vectors -- NDP
+    WifiTxParameters txParamsNdp;
+    WifiMode modeNdp("HeMcs0");
+    txParamsNdp.m_txVector.SetMode(modeNdp);
+    txParamsNdp.m_txVector.SetNTx(m_apMac->GetWifiPhy()->GetNumberOfAntennas());
+    txParamsNdp.m_txVector.SetNss(nr);
+    txParamsNdp.m_txVector.SetPreambleType(WIFI_PREAMBLE_HE_SU);
+    txParamsNdp.m_txVector.SetChannelWidth(m_allowedWidth);
+    txParamsNdp.m_txVector.SetBssColor(heConfiguration->GetBssColor());
+    txParamsNdp.m_txVector.SetGuardInterval(800);
+    txParamsNdp.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
+    txParamsNdp.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection());
+
+    // determine the list of TIDs to check
+    std::vector<uint8_t> tids;
+
+    Time actualAvailableTime = (m_initialFrame ? Time::Min() : m_availableTime);
+
+    auto staIt = m_candidatesCs.begin();
+
+    std::list<Mac48Address> staMacAddrList;
+    // check NDP duration
+    if (!GetHeFem(m_linkId)->TryAddMpdu(mpduNdp, txParamsNdp, actualAvailableTime))
+    {
+        NS_LOG_DEBUG("Remaining TXOP duration is not enough for NDP in channel sounding");
+        SensingTimeout();
+        return NO_TX;
+    }
+
+    NS_LOG_DEBUG("NDP duration:" << txParamsNdp.m_txDuration.GetMicroSeconds());
+
+    actualAvailableTime =
+        actualAvailableTime - txParamsNdp.m_txDuration - m_apMac->GetWifiPhy()->GetSifs();
+    if (actualAvailableTime.IsNegative())
+    {
+        NS_LOG_DEBUG("Remaining TXOP duration is not enough for channel sounding");
+
+        SensingTimeout();
+        return NO_TX;
+    }
+
+    while (staIt != m_candidatesCs.end())
+    {
+        NS_LOG_DEBUG("Next candidate STA (MAC=" << staIt->first->address
+                                                << ", AID=" << staIt->first->aid << ")");
+
+        // check if the AP has at least one frame to be sent to the current station
+
+        // Create NDPA
+        CtrlNdpaHeader ndpaCtrlHeaderCopy = ndpaCtrlHeader;
+        ndpaCtrlHeaderCopy.AddStaInfoField();
+
+        Ptr<Packet> packetNdpaCopy = Create<Packet>();
+        packetNdpaCopy->AddHeader(ndpaCtrlHeaderCopy);
+
+        Ptr<WifiMpdu> mpduNdpaCopy = Create<WifiMpdu>(packetNdpaCopy, hdrNdpa);
+
+        txParamsNdpa = txParamsCtrlFrame;
+
+        if (!GetHeFem(m_linkId)->TryAddMpdu(mpduNdpaCopy, txParamsNdpa, actualAvailableTime))
+        {
+            if (m_candidatesReport.size())
+            {
+                break;
+            }
+            else
+            {
+                SensingTimeout();
+                return NO_TX;
+            }
+        }
+        actualAvailableTime =
+            actualAvailableTime - txParamsNdpa.m_txDuration - m_apMac->GetWifiPhy()->GetSifs();
+        if (actualAvailableTime.IsNegative())
+        {
+            if (m_candidatesReport.size())
+            {
+                break;
+            }
+            else
+            {
+                SensingTimeout();
+                return NO_TX;
+            }
+        }
+
+        // Create BFRP trigger
+        WifiTxVector txVector;
+        CtrlTriggerHeader bfTfCtrlHeader;
+        if (m_candidatesReport.size() > 0)
+        {
+            txVector.SetChannelWidth(m_allowedWidth);
+            txVector.SetPreambleType(WIFI_PREAMBLE_HE_TB);
+            txVector.SetGuardInterval(heConfiguration->GetGuardInterval().GetNanoSeconds());
+
+            std::size_t nRusAssigned = m_candidatesReport.size() + 1;
+            std::size_t nCentral26TonesRus;
+            HeRu::RuType ruType = HeRu::GetEqualSizedRusForStations(m_allowedWidth,
+                                                                    nRusAssigned,
+                                                                    nCentral26TonesRus,
+                                                                    true);
+
+            if (!m_useCentral26TonesRus || m_candidatesReport.size() + 1 == nRusAssigned)
+            {
+                nCentral26TonesRus = 0;
+            }
+            else
+            {
+                nCentral26TonesRus =
+                    std::min(m_candidatesReport.size() + 1 - nRusAssigned, nCentral26TonesRus);
+                NS_LOG_DEBUG(nCentral26TonesRus << " stations are being assigned a 26-tones RU");
+            }
+
+            auto ruSet = HeRu::GetRusOfType(m_allowedWidth, ruType);
+            auto ruSetIt = ruSet.begin();
+            auto central26TonesRus = HeRu::GetCentral26TonesRus(m_allowedWidth, ruType);
+            auto central26TonesRusIt = central26TonesRus.begin();
+
+            WifiMacHeader hdr;
+            hdr.SetType(WIFI_MAC_QOSDATA);
+            hdr.SetAddr2(m_apMac->GetAddress());
+            hdr.SetDsNotTo();
+            hdr.SetDsNotFrom();
+
+            auto candidateIt = m_candidatesReport.begin();
+
+            WifiMode csMode;
+            for (std::size_t i = 0; i < nRusAssigned + nCentral26TonesRus - 1; i++)
+            {
+                hdr.SetAddr1(candidateIt->first->address);
+                csMode = GetHeFem(m_linkId)->GetCsMode() == "0"
+                             ? GetWifiRemoteStationManager(m_linkId)
+                                   ->GetDataTxVector(hdr, m_allowedWidth)
+                                   .GetMode()
+                             : WifiMode(GetHeFem(m_linkId)->GetCsMode());
+                txVector.SetHeMuUserInfo(candidateIt->first->aid,
+                                         {(i < nRusAssigned ? *ruSetIt++ : *central26TonesRusIt++),
+                                          csMode.GetMcsValue(),
+                                          1});
+                candidateIt++;
+            }
+            hdr.SetAddr1(staIt->first->address);
+            csMode = GetHeFem(m_linkId)->GetCsMode() == "0"
+                         ? GetWifiRemoteStationManager(m_linkId)
+                               ->GetDataTxVector(hdr, m_allowedWidth)
+                               .GetMode()
+                         : WifiMode(GetHeFem(m_linkId)->GetCsMode());
+            txVector.SetHeMuUserInfo(
+                staIt->first->aid,
+                {(nCentral26TonesRus == 0 ? *ruSetIt++ : *central26TonesRusIt++),
+                 csMode.GetMcsValue(),
+                 1});
+            bfTfCtrlHeader = CtrlTriggerHeader(TriggerFrameType::BFRP_TRIGGER, txVector);
+            mpduTf = GetTriggerFrame(bfTfCtrlHeader, m_linkId);
+            txParamsSendTf = txParamsCtrlFrame;
+            if (!GetHeFem(m_linkId)->TryAddMpdu(mpduTf, txParamsSendTf, actualAvailableTime))
+            {
+                break;
+            }
+
+            actualAvailableTime = actualAvailableTime - txParamsSendTf.m_txDuration -
+                                  m_apMac->GetWifiPhy()->GetSifs();
+            if (actualAvailableTime.IsNegative())
+            {
+                break;
+            }
+            txVector.SetMode(csMode);
+        }
+        else
+        {
+            txVector.SetMode(modeNdp);
+        }
+        // Beamforming report duration
+        HeMimoControlHeader::CsType type;
+        Time maxBfDuration = Time(0);
+
+        if (m_candidatesCs.size() == 0 || m_candidatesCs.size() == 1)
+        {
+            type = HeMimoControlHeader::SU;
+            WifiMacHeader hdr(WIFI_MAC_QOSDATA);
+            hdr.SetAddr1(m_apMac->GetAddress());
+            hdr.SetAddr2(staIt->first->address);
+            txVector =
+                m_apMac->GetWifiRemoteStationManager(m_linkId)->GetDataTxVector(hdr,
+                                                                                m_allowedWidth);
+        }
+        else
+        {
+            type = HeMimoControlHeader::MU;
+        }
+
+        uint8_t ng, codeBookSize;
+        uint16_t numBytes;
+
+        auto candidateIt = m_candidatesReport.begin();
+        while (candidateIt != m_candidatesReport.end())
+        {
+            ng = m_apMac->GetWifiRemoteStationManager(m_linkId)
+                     ->GetStationHeCapabilities(candidateIt->first->address)
+                     ->GetNgforMuFeedback();
+            codeBookSize = (m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                ->GetStationHeCapabilities(candidateIt->first->address)
+                                ->GetCodebookSizeforMu() == "(9,7)");
+
+            uint8_t ncBf = 1 + m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                   ->GetStationHeCapabilities(candidateIt->first->address)
+                                   ->GetMaxNc();
+            numBytes = ChannelSounding::GetBfReportLength(m_allowedWidth,
+                                                          ng,
+                                                          ncBf,
+                                                          nr,
+                                                          codeBookSize,
+                                                          type);
+            maxBfDuration = Max(maxBfDuration,
+                                WifiPhy::CalculateTxDuration(numBytes,
+                                                             txVector,
+                                                             m_apMac->GetWifiPhy()->GetPhyBand(),
+                                                             candidateIt->first->aid));
+            candidateIt++;
+        }
+
+        if (type == HeMimoControlHeader::SU)
+        {
+            ng = m_apMac->GetWifiRemoteStationManager(m_linkId)
+                     ->GetStationHeCapabilities(staIt->first->address)
+                     ->GetNgforSuFeedback();
+            codeBookSize = (m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                ->GetStationHeCapabilities(staIt->first->address)
+                                ->GetCodebookSizeforSu() == "(6,4)");
+        }
+        else
+        {
+            ng = m_apMac->GetWifiRemoteStationManager(m_linkId)
+                     ->GetStationHeCapabilities(staIt->first->address)
+                     ->GetNgforMuFeedback();
+            codeBookSize = (m_apMac->GetWifiRemoteStationManager(m_linkId)
+                                ->GetStationHeCapabilities(staIt->first->address)
+                                ->GetCodebookSizeforMu() == "(9,7)");
+        }
+
+        uint8_t ncBf = 1 + m_apMac->GetWifiRemoteStationManager(m_linkId)
+                               ->GetStationHeCapabilities(staIt->first->address)
+                               ->GetMaxNc();
+
+        numBytes =
+            ChannelSounding::GetBfReportLength(m_allowedWidth, ng, ncBf, nr, codeBookSize, type);
+        maxBfDuration = Max(maxBfDuration,
+                            WifiPhy::CalculateTxDuration(numBytes,
+                                                         txVector,
+                                                         m_apMac->GetWifiPhy()->GetPhyBand(),
+                                                         staIt->first->aid));
+        
+        if (maxBfDuration < actualAvailableTime)
+        {
+            m_candidatesReport.emplace_back(staIt->first, mpduNdpaCopy);
+            staMacAddrList.push_back(staIt->first->address);
+            ndpaCtrlHeader = ndpaCtrlHeaderCopy;
+            GetHeFem(m_linkId)->GetCsBeamformer()->SetTxParameters(txParamsNdpa, "NDPA");
+            if (m_candidatesReport.size() > 1)
+            {
+                GetHeFem(m_linkId)->GetCsBeamformer()->SetTxParameters(txParamsSendTf, "Trigger");
+                uint16_t ulLength;
+                std::tie(ulLength, maxBfDuration) =
+                    HePhy::ConvertHeTbPpduDurationToLSigLength(maxBfDuration,
+                                                               txVector,
+                                                               m_apMac->GetWifiPhy()->GetPhyBand());
+                bfTfCtrlHeader.SetUlLength(ulLength);
+                GetHeFem(m_linkId)->GetCsBeamformer()->SetBeamformerFrames(
+                    GetTriggerFrame(bfTfCtrlHeader, m_linkId),
+                    "Trigger");
+            }
+            // Note : here the problem for MU Case
+            // break;
+        }
+
+        // move to the next station in the list
+        staIt++;
+    }
+
+    if (m_candidatesReport.empty())
+    {
+        SensingTimeout();
+        return NO_TX;
+    }
+    else
+    {
+        GetHeFem(m_linkId)->GetCsBeamformer()->GenerateNdpaFrame(
+            m_apMac->GetAddress(),
+            staMacAddrList,
+            m_allowedWidth,
+            GetWifiRemoteStationManager(m_linkId));
+
+        if (GetHeFem(m_linkId)->GetCsBeamformer()->GetNumCsStations() == 1)
+        {
+            receiver = *staMacAddrList.begin();
+        }
+        else
+        {
+            receiver = Mac48Address::GetBroadcast();
+        }
+        hdrNdp.SetAddr1(receiver);
+        mpduNdp = Create<WifiMpdu>(packetNdp, hdrNdp);
+        GetHeFem(m_linkId)->GetCsBeamformer()->SetBeamformerFrames(mpduNdp, "NDP");
+        GetHeFem(m_linkId)->GetCsBeamformer()->SetTxParameters(txParamsNdp, "NDP");
+
+        NS_LOG_DEBUG("Number of stations scheduled in channel sounding"
+                     << GetHeFem(m_linkId)->GetCsBeamformer()->GetNumCsStations());
+
+        if (m_soundingType == SU_only)
+        {
+            return TxFormat::BF_NDPA_SOUNDING_TX_SU;
+        }
+        else
+        {
+            return TxFormat::BF_NDPA_SOUNDING_TX;
+        }
+    }
+}
+
+bool
+RrMultiUserScheduler::DoSUNDPASoundingStation()
+{
+    m_candidatesCs.clear();
+    if (m_currentCsSUCandidate == m_candidatesCsSU.begin())
+    {
+        m_candidatesCs.emplace_back(m_currentCsSUCandidate->first,
+                                    m_currentCsSUCandidate->second);
+        m_currentCsSUCandidate++;
+        m_nextSUSounding = true;
+        return true;
+    }
+    else if (m_currentCsSUCandidate != m_candidatesCsSU.end())
+    {
+        m_candidatesCs.emplace_back(m_currentCsSUCandidate->first,
+                                    m_currentCsSUCandidate->second);
+        m_currentCsSUCandidate++;
+        m_nextSUSounding = true;
+        return true;
+    }
+    else
+    {
+        m_candidatesCs.emplace_back(m_currentCsSUCandidate->first,
+                                    m_currentCsSUCandidate->second);
+        m_nextSUSounding = false;
+        return false;
+    }
+}
+
+ns3::MultiUserScheduler::SoundingType
+RrMultiUserScheduler::GetSoundingType()
+{
+    return m_soundingType;
+}
+
+size_t
+RrMultiUserScheduler::GetPollingCandidatesSize()
+{
+    return m_candidatesPoll.size();
 }
 
 } // namespace ns3

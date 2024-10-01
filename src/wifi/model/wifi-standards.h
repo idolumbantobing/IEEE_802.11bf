@@ -45,7 +45,8 @@ enum WifiStandard
     WIFI_STANDARD_80211ac,
     WIFI_STANDARD_80211ad,
     WIFI_STANDARD_80211ax,
-    WIFI_STANDARD_80211be
+    WIFI_STANDARD_80211be,
+    WIFI_STANDARD_80211bf   // Add: 802.11bf standard with note still in draft
 };
 
 /**
@@ -78,6 +79,8 @@ operator<<(std::ostream& os, WifiStandard standard)
         return (os << "802.11ax");
     case WIFI_STANDARD_80211be:
         return (os << "802.11be");
+    case WIFI_STANDARD_80211bf:
+        return (os << "802.11bf"); // Add: 802.11bf standard with note still in draft
     default:
         return (os << "UNSPECIFIED");
     }
@@ -96,6 +99,7 @@ const std::map<WifiStandard, std::list<WifiPhyBand>> wifiStandards = {
     {WIFI_STANDARD_80211ad, {WIFI_PHY_BAND_60GHZ}},
     {WIFI_STANDARD_80211ax, {WIFI_PHY_BAND_2_4GHZ, WIFI_PHY_BAND_5GHZ, WIFI_PHY_BAND_6GHZ}},
     {WIFI_STANDARD_80211be, {WIFI_PHY_BAND_2_4GHZ, WIFI_PHY_BAND_5GHZ, WIFI_PHY_BAND_6GHZ}},
+    {WIFI_STANDARD_80211bf, {WIFI_PHY_BAND_2_4GHZ, WIFI_PHY_BAND_5GHZ, WIFI_PHY_BAND_6GHZ}} // Add: 802.11bf standard with note still in draft
 };
 
 /**
@@ -151,6 +155,7 @@ GetDefaultChannelWidth(WifiStandard standard, WifiPhyBand band)
         return 2160;
     case WIFI_STANDARD_80211ax:
     case WIFI_STANDARD_80211be:
+    case WIFI_STANDARD_80211bf: // Add: 802.11bf standard with note still in draft
         return (band == WIFI_PHY_BAND_2_4GHZ ? 20 : 80);
     default:
         return 20;
@@ -173,6 +178,7 @@ GetDefaultPhyBand(WifiStandard standard)
     case WIFI_STANDARD_80211ac:
     case WIFI_STANDARD_80211ax:
     case WIFI_STANDARD_80211be:
+    case WIFI_STANDARD_80211bf: // Add: 802.11bf standard with note still in draft
         return WIFI_PHY_BAND_5GHZ;
     case WIFI_STANDARD_80211ad:
         return WIFI_PHY_BAND_60GHZ;

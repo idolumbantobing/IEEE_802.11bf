@@ -273,6 +273,7 @@ class WifiMac : public Object
      * behavior.
      */
     void SetPromisc();
+
     /**
      * Enable or disable CTS-to-self feature.
      *
@@ -705,6 +706,17 @@ class WifiMac : public Object
                          WifiDirection dir,
                          uint8_t tid,
                          uint8_t linkId) const;
+
+    /*
+    *************************************
+    Attempt to add IEEE 802.11bf support
+    Public Functions and Attributes for Infratructure Wifi Mac
+    *************************************
+    */
+    /**
+     * \return the flag indicating whether CTS-To-Self is supported.
+     */
+    bool GetCtsToSelfSupported() const;
 
   protected:
     void DoInitialize() override;

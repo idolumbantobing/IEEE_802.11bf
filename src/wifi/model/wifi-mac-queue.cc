@@ -73,6 +73,8 @@ WifiMacQueue::~WifiMacQueue()
     NS_LOG_FUNCTION_NOARGS();
 }
 
+// const WifiMacQueue::ConstIterator WifiMacQueue::EMPTY = g_emptyWifiMacQueue.end ();
+
 void
 WifiMacQueue::DoDispose()
 {
@@ -545,5 +547,67 @@ WifiMacQueue::DoRemove(ConstIterator pos)
 
     return item;
 }
+
+/*
+*************************************
+Attempt to add PCF from ns3.33
+Public Functions and Attributes for Txop
+*************************************
+*/
+
+// Ptr<WifiMpdu>
+// WifiMacQueue::DequeueByAddress(Mac48Address dest)
+// {
+//     NS_LOG_FUNCTION(this << dest);
+//     ConstIterator it = PeekByAddress(dest);
+
+//     if (it == end())
+//     {
+//         return 0;
+//     }
+//     return Dequeue(it);
+// }
+
+// WifiMacQueue::ConstIterator
+// WifiMacQueue::PeekByAddress(Mac48Address dest, ConstIterator pos) const
+// {
+//     NS_LOG_FUNCTION(this << dest);
+//     ConstIterator it = (pos != EMPTY ? pos : begin());
+//     while (it != end())
+//     {
+//         // skip packets that stayed in the queue for too long. They will be
+//         // actually removed from the queue by the next call to a non-const method
+//         if (Simulator::Now() <= (*it)->GetTimeStamp() + m_maxDelay)
+//         {
+//             if (((*it)->GetHeader().IsData() || (*it)->GetHeader().IsQosData()) &&
+//                 (*it)->GetDestinationAddress() == dest)
+//             {
+//                 return it;
+//             }
+//         }
+//         else
+//         {
+//             // signal the presence of expired packets
+//             m_expiredPacketsPresent = true;
+//         }
+//         it++;
+//     }
+//     NS_LOG_DEBUG("The queue is empty");
+//     return end();
+// }
+
+/*
+*************************************
+Attempt to add PCF from ns3.33
+Protected Functions and Attributes for Txop
+*************************************
+*/
+
+/*
+*************************************
+Attempt to add PCF from ns3.33
+Private Functions and Attributes for Txop
+*************************************
+*/
 
 } // namespace ns3

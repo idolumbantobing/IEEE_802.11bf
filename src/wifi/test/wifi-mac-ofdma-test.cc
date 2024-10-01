@@ -99,7 +99,7 @@ TestMultiUserScheduler::GetTypeId()
         TypeId("ns3::TestMultiUserScheduler")
             .SetParent<MultiUserScheduler>()
             .SetGroupName("Wifi")
-            .AddConstructor<TestMultiUserScheduler>()
+            //.AddConstructor<TestMultiUserScheduler>()
             .AddAttribute("ModulationClass",
                           "Modulation class for DL MU PPDUs and TB PPDUs.",
                           EnumValue(WIFI_MOD_CLASS_HE),

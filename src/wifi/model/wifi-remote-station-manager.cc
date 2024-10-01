@@ -139,7 +139,8 @@ WifiRemoteStationManager::WifiRemoteStationManager()
     : m_useNonErpProtection(false),
       m_useNonHtProtection(false),
       m_shortPreambleEnabled(false),
-      m_shortSlotTimeEnabled(false)
+      m_shortSlotTimeEnabled(false),
+      m_pcfSupported(false) // new constructor for pcf support
 {
     NS_LOG_FUNCTION(this);
 }
@@ -2178,6 +2179,25 @@ bool
 WifiRemoteStationManager::UseLdpcForDestination(Mac48Address dest) const
 {
     return (GetLdpcSupported() && GetLdpcSupported(dest));
+}
+
+/*
+    *************************************
+    Attempt to add PCF from ns3.33
+    public methods for WiFi remote station manager
+    *************************************
+*/
+
+void
+WifiRemoteStationManager::SetPcfSupported(bool enable)
+{
+    m_pcfSupported = enable;
+}
+
+bool
+WifiRemoteStationManager::GetPcfSupported(void) const
+{
+    return m_pcfSupported;
 }
 
 } // namespace ns3

@@ -240,6 +240,47 @@ FrameExchangeManager::SetAckedMpduCallback(AckedMpdu callback)
     m_ackedMpduCallback = callback;
 }
 
+// Attempt to add callback for Infrastructure Wifi Mac
+
+void
+FrameExchangeManager::SetInfMacSTARecieveCallback(StaMacReceive callback)
+{
+    NS_LOG_FUNCTION(this << &callback);
+    m_infMacSTAReceiveCallback = callback;
+}
+
+void
+FrameExchangeManager::SetMacTxOkCallback(MacTxOk callback)
+{
+    NS_LOG_FUNCTION(this << &callback);
+    m_macTxOkCallback = callback;
+}
+
+void
+FrameExchangeManager::SetInfShareInfo(InfShareInfo callback)
+{
+    NS_LOG_FUNCTION(this << &callback);
+    m_InfShareInfoCallback = callback;
+}
+
+bool
+FrameExchangeManager::IsInfMacSTAReceiveCallbackNull() const
+{
+    return m_infMacSTAReceiveCallback.IsNull();
+}
+
+bool
+FrameExchangeManager::IsMacTxOkCallbackNull() const
+{
+    return m_macTxOkCallback.IsNull();
+}
+
+bool
+FrameExchangeManager::IsInfShareInfoCallbackNull() const
+{
+    return m_InfShareInfoCallback.IsNull();
+}
+
 void
 FrameExchangeManager::SetPromisc()
 {
@@ -326,7 +367,7 @@ FrameExchangeManager::StartTransmission(Ptr<Txop> dcf, uint16_t allowedWidth)
 
     m_dcf->NotifyChannelAccessed(m_linkId);
 
-    NS_ASSERT(mpdu->GetHeader().IsData() || mpdu->GetHeader().IsMgt());
+    // NS_ASSERT(mpdu->GetHeader().IsData() || mpdu->GetHeader().IsMgt());
 
     // assign a sequence number if this is not a fragment nor a retransmission
     if (!mpdu->IsFragment() && !mpdu->GetHeader().IsRetry())
@@ -345,6 +386,7 @@ FrameExchangeManager::StartTransmission(Ptr<Txop> dcf, uint16_t allowedWidth)
     NS_ASSERT(m_protectionManager);
     NS_ASSERT(m_ackManager);
     WifiTxParameters txParams;
+
     txParams.m_txVector =
         GetWifiRemoteStationManager()->GetDataTxVector(mpdu->GetHeader(), m_allowedWidth);
     txParams.m_protection = m_protectionManager->TryAddMpdu(mpdu, txParams);
@@ -352,7 +394,22 @@ FrameExchangeManager::StartTransmission(Ptr<Txop> dcf, uint16_t allowedWidth)
     txParams.AddMpdu(mpdu);
     UpdateTxDuration(mpdu->GetHeader().GetAddr1(), txParams);
 
-    SendMpduWithProtection(mpdu, txParams);
+    if (!IsInfShareInfoCallbackNull())
+    {
+        DequeueMpdu(mpdu);
+        m_InfShareInfoCallback(dcf, mpdu);
+    }
+
+    if (mpdu->GetHeader().IsNdpa() || mpdu->GetHeader().IsNdp() || mpdu->GetHeader().IsCfEnd())
+    {
+        m_mpdu = mpdu;
+        SendMpdu();
+        m_mpdu = nullptr;
+    }
+    else
+    {
+        SendMpduWithProtection(mpdu, txParams);
+    }
 
     return true;
 }
@@ -464,7 +521,6 @@ void
 FrameExchangeManager::SendMpdu()
 {
     NS_LOG_FUNCTION(this);
-
     Time txDuration = m_phy->CalculateTxDuration(GetPsduSize(m_mpdu, m_txParams.m_txVector),
                                                  m_txParams.m_txVector,
                                                  m_phy->GetPhyBand());
@@ -473,7 +529,19 @@ FrameExchangeManager::SendMpdu()
 
     if (m_txParams.m_acknowledgment->method == WifiAcknowledgment::NONE)
     {
-        Simulator::Schedule(txDuration, &FrameExchangeManager::TransmissionSucceeded, this);
+        // Attempt to implement PCF
+        if (!IsMacTxOkCallbackNull())
+        {
+            Simulator::Schedule(txDuration, &FrameExchangeManager::m_macTxOkCallback, this, m_mpdu);
+            // m_dcf->NotifyChannelReleasedForPCF(m_linkId);
+            // m_dcf = nullptr;
+        }
+        else
+        {
+            Simulator::Schedule(txDuration, &FrameExchangeManager::TransmissionSucceeded, this);
+        }
+
+        // Simulator::Schedule(txDuration, &FrameExchangeManager::TransmissionSucceeded, this);
 
         if (!m_mpdu->GetHeader().IsQosData() ||
             m_mpdu->GetHeader().GetQosAckPolicy() == WifiMacHeader::NO_ACK)
@@ -522,7 +590,6 @@ void
 FrameExchangeManager::ForwardMpduDown(Ptr<WifiMpdu> mpdu, WifiTxVector& txVector)
 {
     NS_LOG_FUNCTION(this << *mpdu << txVector);
-
     auto psdu = Create<WifiPsdu>(mpdu, false);
     FinalizeMacHeader(psdu);
     m_allowedWidth = std::min(m_allowedWidth, txVector.GetChannelWidth());
@@ -803,7 +870,10 @@ FrameExchangeManager::SendCtsToSelf(const WifiTxParameters& txParams)
     cts.SetDsNotTo();
     cts.SetNoMoreFragments();
     cts.SetNoRetry();
-    cts.SetAddr1(m_self);
+    // cts.SetAddr1(m_self);
+    // attempt to implement PCF for Polling Phase
+    cts.SetAddr1(GetBssid());
+    cts.SetAddr2(GetAddress());
 
     NS_ASSERT(txParams.m_protection &&
               txParams.m_protection->method == WifiProtection::CTS_TO_SELF);
@@ -814,6 +884,8 @@ FrameExchangeManager::SendCtsToSelf(const WifiTxParameters& txParams)
                                            txParams.m_txDuration,
                                            txParams.m_acknowledgment->acknowledgmentTime));
 
+    // attempt to implement PCF
+    ctsToSelfProtection->ctsTxVector = m_mac->GetWifiRemoteStationManager()->GetCtsToSelfTxVector();
     ForwardMpduDown(Create<WifiMpdu>(Create<Packet>(), cts), ctsToSelfProtection->ctsTxVector);
 
     Time ctsDuration = m_phy->CalculateTxDuration(GetCtsSize(),
@@ -893,6 +965,10 @@ FrameExchangeManager::TransmissionSucceeded()
 
     // Upon a transmission success, a non-QoS station transmits the next fragment,
     // if any, or releases the channel, otherwise
+    std::string moreFragments = " no more fragments";
+    if (m_moreFragments)
+        moreFragments = " more fragments";
+    NS_LOG_INFO("Transmission succeeded from: " << m_mac->GetAddress() << moreFragments);
     if (m_moreFragments)
     {
         NS_LOG_DEBUG("Schedule transmission of next fragment in a SIFS");
@@ -1116,7 +1192,17 @@ FrameExchangeManager::Receive(Ptr<const WifiPsdu> psdu,
     NS_LOG_FUNCTION(
         this << psdu << rxSignalInfo << txVector << perMpduStatus.size()
              << std::all_of(perMpduStatus.begin(), perMpduStatus.end(), [](bool v) { return v; }));
-
+    
+    if (psdu->GetAddr1() == m_mac->GetAddress())
+    {
+        NS_LOG_INFO("|");
+        NS_LOG_INFO(" ---------------------------------------------------------------");
+        NS_LOG_INFO("| " << Simulator::Now() << " Received : " << psdu->GetHeader(0)
+                         << " SNR: " << 10.0 * std::log10(rxSignalInfo.snr));
+        NS_LOG_INFO(" ---------------------------------------------------------------");
+        NS_LOG_INFO("|");
+    }
+    // NS_LOG_INFO(Simulator::Now() << " || Received : " << psdu->GetHeader(0));
     if (!perMpduStatus.empty())
     {
         // for A-MPDUs, we get here only once
@@ -1154,6 +1240,10 @@ FrameExchangeManager::Receive(Ptr<const WifiPsdu> psdu,
         {
             if (!mpdu->GetHeader().IsCtl())
             {
+                if (!m_infMacSTAReceiveCallback.IsNull())
+                {
+                    m_infMacSTAReceiveCallback(m_dcf);
+                }
                 m_rxMiddle->Receive(mpdu, m_linkId);
             }
         }
@@ -1257,10 +1347,10 @@ FrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
     NS_LOG_FUNCTION(this << *mpdu << rxSignalInfo << txVector << inAmpdu);
     // The received MPDU is either broadcast or addressed to this station
     NS_ASSERT(mpdu->GetHeader().GetAddr1().IsGroup() || mpdu->GetHeader().GetAddr1() == m_self);
-
+    
     double rxSnr = rxSignalInfo.snr;
     const WifiMacHeader& hdr = mpdu->GetHeader();
-
+    
     if (hdr.IsCtl())
     {
         if (hdr.IsRts())
@@ -1320,7 +1410,7 @@ FrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
     else if (hdr.IsMgt())
     {
         NS_ABORT_MSG_IF(inAmpdu, "Received management frame as part of an A-MPDU");
-
+        
         if (hdr.IsBeacon() || hdr.IsProbeResp())
         {
             // Apply SNR tag for beacon quality measurements
@@ -1335,12 +1425,12 @@ FrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
         {
             NS_LOG_DEBUG("Received " << hdr.GetTypeString() << " from=" << hdr.GetAddr2()
                                      << ", schedule ACK");
-            Simulator::Schedule(m_phy->GetSifs(),
-                                &FrameExchangeManager::SendNormalAck,
-                                this,
-                                hdr,
-                                txVector,
-                                rxSnr);
+                Simulator::Schedule(m_phy->GetSifs(),
+                                    &FrameExchangeManager::SendNormalAck,
+                                    this,
+                                    hdr,
+                                    txVector,
+                                    rxSnr);
         }
 
         m_rxMiddle->Receive(mpdu, m_linkId);
@@ -1428,5 +1518,12 @@ FrameExchangeManager::EndReceiveAmpdu(Ptr<const WifiPsdu> psdu,
 {
     NS_ASSERT_MSG(false, "A non-QoS station should not receive an A-MPDU");
 }
+
+/*
+*************************************
+Attempt to add MU-OFDMA
+Public functions and attributes for Ap Wifi Mac
+*************************************
+*/
 
 } // namespace ns3

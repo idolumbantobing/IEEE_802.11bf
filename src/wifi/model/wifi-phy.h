@@ -27,7 +27,7 @@
 #include "wifi-standards.h"
 
 #include "ns3/error-model.h"
-
+#include "ns3/mac48-address.h"
 #include <limits>
 
 namespace ns3
@@ -637,6 +637,18 @@ class WifiPhy : public Object
                                              MpduInfo aMpdu,
                                              SignalNoiseDbm signalNoise,
                                              uint16_t staId);
+
+    // '''''''''''''''''''''''''''''''''''''''''''''''''' //
+    // NEW, ADD, MODIFY
+
+    void NotifyMonitorChannelAccess(ns3::Mac48Address ApMacAddress,
+                              ns3::Time currentTime,
+                              bool RequestedGranted);
+
+    typedef void (*PhyChannelAccessTracedCallback)(ns3::Mac48Address ApMacAddress,
+                              ns3::Time currentTime,
+                              bool RequestedGranted);
+    // '''''''''''''''''''''''''''''''''''''''''''''''''' //
 
     /**
      * Public method used to fire a MonitorSniffer trace for a wifi PSDU being transmitted.
@@ -1322,6 +1334,12 @@ class WifiPhy : public Object
      */
     void Configure80211be();
     /**
+     * Add: configuration function for 802.11bf standard
+     * Configure WifiPhy with appropriate channel frequency and
+     * supported rates for 802.11bf standard.
+     */
+    void Configure80211bf();
+    /**
      * Configure the device MCS set with the appropriate HtMcs modes for
      * the number of available transmit spatial streams
      */
@@ -1460,6 +1478,9 @@ class WifiPhy : public Object
                    MpduInfo,
                    uint16_t /* STA-ID*/>
         m_phyMonitorSniffTxTrace;
+
+    TracedCallback<ns3::Mac48Address, ns3::Time /* Time Accessed */, bool /* Requested - Granted */>
+        m_phyMonitorChannelAccessTrace; // NEW, MODIFY, ADD
 
     /**
      * \return the map of __implemented__ PHY entities.

@@ -64,6 +64,9 @@ class WifiTxTimer
         WAIT_TB_PPDU_AFTER_BASIC_TF,
         WAIT_QOS_NULL_AFTER_BSRP_TF,
         WAIT_BLOCK_ACK_AFTER_TB_PPDU,
+        // attempt to add channel sounding from ns3.37 : new tx timers
+        WAIT_BF_REPORT_AFTER_NDP,
+        WAIT_BF_REPORT_AFTER_BFRP_TF
     };
 
     /** Default constructor */
@@ -191,6 +194,25 @@ class WifiTxTimer
      */
     void SetPsduMapResponseTimeoutCallback(PsduMapResponseTimeout callback) const;
 
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    new callback for tx timer
+    *************************************
+    */
+
+    /**
+     * Beamforming report timeout callback typedef
+     */
+    typedef Callback<void, uint8_t> BfReportTimeout;
+    /**
+     * Set the callback to invoke when the TX timer of beamforming report feedback expires.
+     *
+     * \param callback the callback to invoke when the TX timer of beamforming report feedback
+     * expires
+     */
+    void SetBfReportTimeoutCallback(BfReportTimeout callback) const;
+
   private:
     /**
      * This method is called when the timer expires. It invokes the callbacks
@@ -229,6 +251,19 @@ class WifiTxTimer
      */
     void FeedTraceSource(Ptr<WifiPsdu> psdu, WifiTxVector txVector);
 
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    new private function for tx timer
+    *************************************
+    */
+
+    /**
+     * This method is called when the timer expires to feed the beamforming report response timeout
+     * callback
+     */
+    void FeedTraceSource(void);
+
     /**
      * This method is called when the timer expires to feed the PSDU map response
      * timeout callback.
@@ -252,6 +287,16 @@ class WifiTxTimer
     mutable PsduResponseTimeout m_psduResponseTimeoutCallback;
     /// the PSDU map response timeout callback
     mutable PsduMapResponseTimeout m_psduMapResponseTimeoutCallback;
+
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    new private attribute for tx timer
+    *************************************
+    */
+
+    /// the beamforming report feedback timeout callback
+    mutable BfReportTimeout m_bfReportTimeoutCallback;
 };
 
 } // namespace ns3

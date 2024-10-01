@@ -803,6 +803,12 @@ WifiMac::ConfigurePhyDependentParameters(uint8_t linkId)
     uint32_t cwmin = (standard == WIFI_STANDARD_80211b ? 31 : 15);
     uint32_t cwmax = 1023;
 
+    // if (standard == WIFI_STANDARD_80211bf)
+    // {
+    //     cwmin = 2;
+    //     cwmax = 4;
+    // }
+
     SetDsssSupported(standard == WIFI_STANDARD_80211b, linkId);
     SetErpSupported(standard >= WIFI_STANDARD_80211g &&
                         m_links[linkId]->phy->GetPhyBand() == WIFI_PHY_BAND_2_4GHZ,
@@ -822,8 +828,13 @@ WifiMac::SetupFrameExchangeManager(WifiStandard standard)
     {
         feManager = CreateObject<EhtFrameExchangeManager>();
     }
-    else if (standard >= WIFI_STANDARD_80211ax)
+    else if (standard >= WIFI_STANDARD_80211ax || standard >= WIFI_STANDARD_80211bf)
     {
+        /*
+        * Add: support for 802.11bf
+        * Set heFrameExchangeManager as the default frame exchange manager for 802.11bf
+        * Since current implementation of 802.11bf is based on 802.11ax
+        */
         feManager = CreateObject<HeFrameExchangeManager>();
     }
     else if (standard >= WIFI_STANDARD_80211ac)
@@ -1499,7 +1510,6 @@ void
 WifiMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
 {
     NS_LOG_FUNCTION(this << *mpdu << linkId);
-
     const WifiMacHeader* hdr = &mpdu->GetOriginal()->GetHeader();
     Mac48Address to = hdr->GetAddr1();
     Mac48Address from = hdr->GetAddr2();
@@ -2118,6 +2128,18 @@ WifiMac::GetHeCapabilities(uint8_t linkId) const
     capabilities.SetHighestMcsSupported(maxMcs);
     capabilities.SetHighestNssSupported(phy->GetMaxSupportedTxSpatialStreams());
 
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    Integrate capabilities of channel sounding in Wifi Mac
+    *************************************
+    */
+    capabilities.SetNgforSuFeedback(heConfiguration->GetNgforSuFeedback());
+    capabilities.SetNgforMuFeedback(heConfiguration->GetNgforMuFeedback());
+    capabilities.SetCodebookSizeforSu(heConfiguration->GetCodebookSizeforSu());
+    capabilities.SetCodebookSizeforMu(heConfiguration->GetCodebookSizeforMu());
+    capabilities.SetMaxNc(heConfiguration->GetMaxNc());
+
     return capabilities;
 }
 
@@ -2262,6 +2284,19 @@ WifiMac::GetMaxAmsduSize(AcIndex ac) const
         return 0;
     }
     return maxSize;
+}
+
+/*
+*************************************
+Attempt to add IEEE 802.11bf support
+Public Functions and Attributes for Infratructure Wifi Mac
+*************************************
+*/
+
+bool
+WifiMac::GetCtsToSelfSupported() const
+{
+    return m_ctsToSelfSupported;
 }
 
 } // namespace ns3

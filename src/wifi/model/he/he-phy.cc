@@ -680,7 +680,6 @@ HePhy::ProcessSigA(Ptr<Event> event, PhyFieldRxStatus status)
             NS_ASSERT(txVector.GetMode(staId) == m_trigVector->GetMode(staId));
             NS_ASSERT(txVector.GetNss(staId) == m_trigVector->GetNss(staId));
             NS_ASSERT(txVector.GetHeMuUserInfo(staId) == m_trigVector->GetHeMuUserInfo(staId));
-
             m_currentMuPpduUid =
                 ppdu->GetUid(); // to be able to correctly schedule start of MU payload
         }

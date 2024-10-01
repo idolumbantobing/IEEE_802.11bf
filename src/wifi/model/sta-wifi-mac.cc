@@ -23,6 +23,7 @@
 
 #include "channel-access-manager.h"
 #include "frame-exchange-manager.h"
+#include "infrastructure-wifi-mac.h"
 #include "mgt-headers.h"
 #include "qos-txop.h"
 #include "snr-tag.h"
@@ -58,7 +59,7 @@ StaWifiMac::GetTypeId()
 {
     static TypeId tid =
         TypeId("ns3::StaWifiMac")
-            .SetParent<WifiMac>()
+            .SetParent<InfrastructureWifiMac>()
             .SetGroupName("Wifi")
             .AddConstructor<StaWifiMac>()
             .AddAttribute("ProbeRequestTimeout",
@@ -143,7 +144,19 @@ StaWifiMac::GetTypeId()
             .AddTraceSource("ReceivedBeaconInfo",
                             "Information about every received Beacon frame",
                             MakeTraceSourceAccessor(&StaWifiMac::m_beaconInfo),
-                            "ns3::ApInfo::TracedCallback");
+                            "ns3::ApInfo::TracedCallback")
+            .AddAttribute(
+                "WiFiSensingSupported",
+                "This Boolean attribute is set to enable PCF support at this STA.",
+                BooleanValue(false),
+                MakeBooleanAccessor(&StaWifiMac::SetPcfSupported, &StaWifiMac::GetPcfSupported),
+                MakeBooleanChecker())
+            .AddAttribute(
+                "ManualConnection",
+                "This Boolean attribute is set to enable manually connection to dedicated AP.",
+                BooleanValue(false),
+                MakeBooleanAccessor(&StaWifiMac::SetManualConnection, &StaWifiMac::GetManualConnection),
+                MakeBooleanChecker());
     return tid;
 }
 
@@ -153,7 +166,6 @@ StaWifiMac::StaWifiMac()
       m_assocRequestEvent()
 {
     NS_LOG_FUNCTION(this);
-
     // Let the lower layers know that we are acting as a non-AP STA in
     // an infrastructure BSS.
     SetTypeOfStation(STA);
@@ -614,7 +626,6 @@ StaWifiMac::SendAssociationRequest(bool isReassoc)
     hdr.SetDsNotFrom();
     hdr.SetDsNotTo();
     Ptr<Packet> packet = Create<Packet>();
-
     auto frame = GetAssociationRequest(isReassoc, linkId);
 
     // include a Multi-Link Element if this device has multiple links (independently
@@ -814,10 +825,17 @@ StaWifiMac::ScanningTimeout(const std::optional<ApInfo>& bestAp)
     {
         if (GetStaLink(link).bssid.has_value() || GetNLinks() == 1)
         {
-            RestartBeaconWatchdog(delay, id);
+            if (!GetPcfSupported())
+            {
+                RestartBeaconWatchdog(delay, id);
+            }
         }
     }
     SetState(WAIT_ASSOC_RESP);
+    if (GetManualConnection()) // use this for residential scenario of wifi-sensing since it is necessary to connect to the ap based on scenario
+    {
+        GetLink(bestAp->m_linkId).bssid = GetBssid(0U);
+    }
     SendAssociationRequest(false);
 }
 
@@ -1099,9 +1117,30 @@ StaWifiMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
 {
     NS_LOG_FUNCTION(this << *mpdu << +linkId);
     // consider the MAC header of the original MPDU (makes a difference for data frames only)
+
     const WifiMacHeader* hdr = &mpdu->GetOriginal()->GetHeader();
     Ptr<const Packet> packet = mpdu->GetPacket();
-    NS_ASSERT(!hdr->IsCtl());
+
+    if (hdr->IsBeacon())
+    {
+        MgtBeaconHeader beacon;
+        mpdu->GetPacket()->PeekHeader(beacon);
+        CfParameterSet cfParameterSet = beacon.GetCfParameterSet();
+        if (cfParameterSet.GetCFPCount() == 0)
+        {
+            // see section 9.3.2.2 802.11-1999
+            if (GetPcfSupported())
+            {
+                GetChannelAccessManager(linkId)->NotifyNavStartNow(
+                    MicroSeconds(cfParameterSet.GetCFPMaxDurationUs()));
+            }
+            else
+            {
+                GetChannelAccessManager(linkId)->NotifyNavStartNow(
+                    MicroSeconds(cfParameterSet.GetCFPMaxDurationUs()));
+            }
+        }
+    }
     Mac48Address myAddr = hdr->IsData() ? Mac48Address::ConvertFrom(GetDevice()->GetAddress())
                                         : GetFrameExchangeManager(linkId)->GetAddress();
     if (hdr->GetAddr3() == myAddr)
@@ -1114,6 +1153,17 @@ StaWifiMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
         NS_LOG_LOGIC("packet is not for us");
         NotifyRxDrop(packet);
         return;
+    }
+
+    // attempt to implement IEEE 802.11bf
+    // Changes on recieve behavior
+    if (hdr->IsCfPoll())
+    {
+        // assume the station always response to the poll
+        if (GetPcfSupported())
+        {
+            StartCfPeriod();
+        }
     }
     if (hdr->IsData())
     {
@@ -1263,7 +1313,10 @@ StaWifiMac::ReceiveBeacon(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
         m_beaconArrival(Simulator::Now());
         Time delay = MicroSeconds(std::get<MgtBeaconHeader>(apInfo.m_frame).GetBeaconIntervalUs() *
                                   m_maxMissedBeacons);
-        RestartBeaconWatchdog(delay, linkId);
+        if (!GetPcfSupported())
+        {
+            RestartBeaconWatchdog(delay, linkId);
+        }
         UpdateApInfo(apInfo.m_frame, hdr.GetAddr2(), hdr.GetAddr3(), linkId);
     }
     else
@@ -2068,6 +2121,16 @@ operator<<(std::ostream& os, const StaWifiMac::ApInfo& apInfo)
     std::visit([&os](auto&& frame) { frame.Print(os); }, apInfo.m_frame);
     os << "]";
     return os;
+}
+
+void StaWifiMac::SetManualConnection(bool manual)
+{
+    m_manualConnection = manual;
+}
+
+bool StaWifiMac::GetManualConnection() const
+{
+    return m_manualConnection;
 }
 
 } // namespace ns3

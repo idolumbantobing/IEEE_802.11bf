@@ -52,6 +52,17 @@ class RrMultiUserScheduler : public MultiUserScheduler
     RrMultiUserScheduler();
     ~RrMultiUserScheduler() override;
 
+    /*
+    *************************************
+    Attempt to add support for IEEE 802.11bf
+    Public Functions and Attributes for RR Multi User Scheduler
+    *************************************
+    */
+    void CheckRespondedPollingStation(Mac48Address address) override;
+    bool DoSUNDPASoundingStation() override;
+    size_t GetPollingCandidatesSize() override;
+    ns3::MultiUserScheduler::SoundingType GetSoundingType() override;
+
   protected:
     void DoDispose() override;
     void DoInitialize() override;
@@ -170,6 +181,72 @@ class RrMultiUserScheduler : public MultiUserScheduler
     CtrlTriggerHeader m_trigger;           //!< Trigger Frame to send
     WifiMacHeader m_triggerMacHdr;         //!< MAC header for Trigger Frame
     WifiTxParameters m_txParams;           //!< TX parameters
+
+    /*
+     *************************************
+     Attempt to add Channel Sounding from ns3.37
+     Private Functions and Attributes for RR Multi User Scheduler
+     *************************************
+    */
+
+    /**
+     * Check if it is possible to have channel sounding given the current time limits.
+     *
+     *  \return CS_TX if it is possible to have channel sounding
+     */
+    virtual TxFormat TryChannelSounding();
+    /**
+     * Check whether channel sounding is enabled. Channel sounding is disabled if channel sounding
+     * interval is 0. \return whether channel sounding is enabled.
+     */
+    bool IsChannelSoundingEnabled();
+
+    /*
+     *************************************
+     Attempt to modify MU-OFDMA from ns3.40
+     Private Functions and Attributes for RR Multi User Scheduler
+     *************************************
+    */
+
+    // attempt to modify MU-OFDMA for 11bf Polling Phase
+    PollingMuInfo ComputePollMuInfo() override;
+    CtrlTriggerHeader m_triggerUlPoll;        //!< the Trigger Frame used to solicit TB PPDUs
+    WifiMacHeader m_macHdrTriggerUlPoll;      //!< the MAC header for the Trigger Frame
+    WifiTxParameters m_txParamsTriggerUlPoll; //!< the transmission parameters for the Trigger Frame
+
+    /**
+     * Check whether PCF is enabled
+     *
+     * \return whether PCF is enabled.
+     */
+    bool IsPCFEnabled();
+    /**
+     * Check if it is possible to do polling phase of 802.11bf.
+     *
+     *  \return BF_POLL_DL_TX if it is possible to do polling phase
+     */
+    virtual TxFormat TryPollingPhase11bf();
+    /**
+     * Check if it is possible to do NDPA Sounding phase of 802.11bf.
+     *
+     *  \return BF_NDPA_SOUNDING_TX if it is possible to do polling phase
+     */
+    virtual TxFormat TryNDPASoundingPhase11bf();
+
+    SoundingType m_soundingType = SoundingType::MU_only; //!< Type of sounding to perform
+    std::list<CandidateInfo> m_candidatesCs;     //!< Candidate stations for channel sounding
+    std::list<CandidateInfo> m_candidatesCsSU; //!< Candidate stations for SU transmission channel sounding
+    std::list<CandidateInfo>::iterator
+        m_currentCsSUCandidate;                //!< Current candidate for channel sounding
+    std::list<CandidateInfo> m_candidatesPoll;   //!< Candidate stations for polling 11bf
+    std::list<CandidateInfo> m_candidatesReport; //!< Candidate stations for reporting phase 11bf
+    std::list<MasterInfo> m_staListPoll;         //!< List of stations to serve for polling 11bf
+    std::list<MasterInfo> m_staListCs;           //!< List of stations to serve for channel sounding
+    bool m_enableMuMimo;                         //!< Whether MU-MIMO is used instead of OFDMA
+    uint8_t m_nssPerSta;         //!< Number of streams per station in downlink MU-MIMO
+    Time m_csInterval;           //!< Channel sounding interval
+    bool m_csStart;              //!< Whether channel sounding has occurred
+    uint8_t m_maxNumDlMuMimoSta; //!< Maximum number of stations for Dl MU-MIMO transmission
 };
 
 } // namespace ns3

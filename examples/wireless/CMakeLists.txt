@@ -298,3 +298,10 @@ build_example(
   LIBRARIES_TO_LINK ${libwifi}
                     ${libapplications}
 )
+      
+build_example(
+  NAME wifi-bf-network
+  SOURCE_FILES wifi-bf-network.cc
+  LIBRARIES_TO_LINK ${libwifi}
+                    ${libapplications}
+)

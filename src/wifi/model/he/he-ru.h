@@ -275,11 +275,15 @@ class HeRu
      *                  the number of stations that are assigned an RU
      * \param[out] nCentral26TonesRus the number of additional 26-tone RUs that can be
      *                                allocated if the returned RU size is greater than 26 tones
+     * \param allStations If true, the method tries to assign equal-sized RUs for all the stations.
+     *                    If the number of RUs are not enough to cover all the stations, the method will assign RUs to
+     *                    the maximum number of stations the channel bandwidth can support.
      * \return the RU type
      */
     static RuType GetEqualSizedRusForStations(uint16_t bandwidth,
                                               std::size_t& nStations,
-                                              std::size_t& nCentral26TonesRus);
+                                              std::size_t& nCentral26TonesRus,
+                                              bool allStations = false);
 
     /// (bandwidth, number of tones) pair
     typedef std::pair<uint8_t, RuType> BwTonesPair;

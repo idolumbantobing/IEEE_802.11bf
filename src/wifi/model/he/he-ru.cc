@@ -812,27 +812,83 @@ HeRu::GetRuType(uint16_t bandwidth)
 HeRu::RuType
 HeRu::GetEqualSizedRusForStations(uint16_t bandwidth,
                                   std::size_t& nStations,
-                                  std::size_t& nCentral26TonesRus)
+                                  std::size_t& nCentral26TonesRus,
+                                  bool allStations)
+
 {
     RuType ruType;
     uint8_t nRusAssigned = 0;
 
-    // iterate over all the available RU types
-    for (auto& ru : m_heRuSubcarrierGroups)
+    if (!allStations)
     {
-        if (ru.first.first == bandwidth && ru.second.size() <= nStations)
+        // iterate over all the available RU types
+        for (auto& ru : m_heRuSubcarrierGroups)
         {
-            ruType = ru.first.second;
-            nRusAssigned = ru.second.size();
-            break;
-        }
-        else if (bandwidth == 160 && ru.first.first == 80 && (2 * ru.second.size() <= nStations))
-        {
-            ruType = ru.first.second;
-            nRusAssigned = 2 * ru.second.size();
-            break;
+            if (ru.first.first == bandwidth && ru.second.size() <= nStations)
+            {
+                ruType = ru.first.second;
+                nRusAssigned = ru.second.size();
+                break;
+            }
+            else if (bandwidth == 160 && ru.first.first == 80 &&
+                     (2 * ru.second.size() <= nStations))
+            {
+                ruType = ru.first.second;
+                nRusAssigned = 2 * ru.second.size();
+                break;
+            }
         }
     }
+    else
+    {
+        uint16_t totalBw = 0;
+        // iterate over all the available RU types
+        for (auto& ru : m_heRuSubcarrierGroups)
+        {
+            if (ru.first.first == bandwidth)
+            {
+                // There are enough RUs for all the stations. All the stations will be scheduled.
+                if (ru.second.size() >= nStations &&
+                    ru.first.first * nStations / ru.second.size() > totalBw)
+                {
+                    totalBw = ru.first.first * nStations / ru.second.size();
+                    ruType = ru.first.second;
+                    nRusAssigned = nStations;
+                }
+                // There are not enough RUs for all the stations. Only part of the stations can be
+                // scheduled.
+                else if (ru.second.size() < nStations && ru.second.size() > nRusAssigned)
+                {
+                    ruType = ru.first.second;
+                    nRusAssigned = ru.second.size();
+                }
+            }
+            else if (bandwidth == 160)
+            {
+                // There are enough RUs for all the stations. All the stations will be scheduled.
+                if (ru.first.first == 80 && (2 * ru.second.size() >= nStations) &&
+                    ru.first.first * nStations / ru.second.size() > totalBw)
+                {
+                    totalBw = ru.first.first * nStations / ru.second.size();
+                    ruType = ru.first.second;
+                    nRusAssigned = nStations;
+                }
+                // There are not enough RUs for all the stations. Only part of the stations can be
+                // scheduled.
+                else if (2 * ru.second.size() < nStations && 2 * ru.second.size() > nRusAssigned)
+                {
+                    ruType = ru.first.second;
+                    nRusAssigned = 2 * ru.second.size();
+                }
+            }
+        }
+
+        if (nStations == nRusAssigned)
+        {
+            return ruType;
+        }
+    }
+    
     if (nRusAssigned == 0)
     {
         NS_ABORT_IF(bandwidth != 160 || nStations != 1);

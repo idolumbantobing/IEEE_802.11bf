@@ -293,6 +293,12 @@ MacRxMiddle::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
     // consider the MAC header of the original MPDU (makes a difference for data frames only)
     const WifiMacHeader* hdr = &mpdu->GetOriginal()->GetHeader();
     NS_ASSERT(hdr->IsData() || hdr->IsMgt());
+    // Attempt : Additional condition for PCF
+    if (!m_pcfCallback.IsNull())
+    {
+        NS_LOG_INFO("Send Next CF frame after : " << mpdu);
+        m_pcfCallback(linkId);
+    }
 
     OriginatorRxStatus* originator = Lookup(hdr);
     /**
@@ -341,6 +347,19 @@ MacRxMiddle::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
         // transmitted packets (i.e., with the same UID) to the receiver.
         m_callback(Create<WifiMpdu>(aggregate, *hdr), linkId);
     }
+}
+
+/*
+  *************************************
+  Attempt to add PCF from ns3.33
+  Public, Protected, Private Functions and Attributes for MAC RX middle
+  *************************************
+*/
+
+void
+MacRxMiddle::SetPcfCallback(PcfCallback callback)
+{
+    m_pcfCallback = callback;
 }
 
 } // namespace ns3

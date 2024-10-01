@@ -30,6 +30,8 @@
 #include "wifi-tx-timer.h"
 #include "wifi-tx-vector.h"
 
+#include "infrastructure-wifi-mac.h"
+
 // Needed to compile wave bindings
 #include "channel-access-manager.h"
 #include "wifi-ack-manager.h"
@@ -69,6 +71,23 @@ class FrameExchangeManager : public Object
      * typedef for a callback to invoke when an MPDU is successfully acknowledged.
      */
     typedef Callback<void, Ptr<const WifiMpdu>> AckedMpdu;
+
+    // Attempt to add callback for Infrastructure Wifi Mac
+    /**
+     * typedef for a callback to invoke when a
+     * packet transmission was failed.
+     */
+    typedef Callback<void, Ptr<Txop>> StaMacReceive;
+    /**
+     * typedef for a callback to invoke when a
+     * packet transmission was failed.
+     */
+    typedef Callback<void, Ptr<const WifiMpdu>> MacTxOk;
+    /**
+     * typedef for a callback to invoke when a
+     * packet transmission was failed.
+     */
+    typedef Callback<void, Ptr<Txop>, Ptr<const WifiMpdu>> InfShareInfo;
 
     /**
      * Request the FrameExchangeManager to start a frame exchange sequence.
@@ -184,6 +203,45 @@ class FrameExchangeManager : public Object
      * \param callback the callback to invoke when an MPDU is successfully acked
      */
     void SetAckedMpduCallback(AckedMpdu callback);
+
+    // Attempt to add callback for Infrastructure Wifi Mac
+    /**
+     * Set the callback to invoke when an MPDU is received by AP and need to be handled by
+     * Infrastructure Wifi Mac.
+     *
+     * \param callback the callback to invoke invoke when an MPDU is received and need to be handled
+     * by Infrastructure Wifi Mac
+     */
+    void SetInfMacSTARecieveCallback(StaMacReceive callback);
+    /**
+     * Set the callback to invoke when an MPDU is received and need to be handled by Infrastructure
+     * Wifi Mac.
+     *
+     * \param callback the callback to invoke invoke when an MPDU is received and need to be handled
+     * by Infrastructure Wifi Mac
+     */
+    void SetMacTxOkCallback(MacTxOk callback);
+    /**
+     * Set the callback to invoke when an MPDU is received and need to be handled by Infrastructure
+     * Wifi Mac.
+     *
+     * \param callback the callback to invoke invoke when an MPDU is received and need to be handled
+     * by Infrastructure Wifi Mac
+     */
+    void SetInfShareInfo(InfShareInfo callback);
+    /**
+     * Check wheter callback for Infrastructure Wifi Mac is already set.
+     */
+    bool IsInfMacSTAReceiveCallbackNull() const;
+    /**
+     * Check wheter callback for Infrastructure Wifi Mac is already set.
+     */
+    bool IsMacTxOkCallbackNull() const;
+    /**
+     * Check wheter callback for Infrastructure Wifi Mac is already set.
+     */
+    bool IsInfShareInfoCallbackNull() const;
+
     /**
      * Enable promiscuous mode.
      */
@@ -480,6 +538,11 @@ class FrameExchangeManager : public Object
     bool m_promisc;                    //!< Flag if the device is operating in promiscuous mode
     DroppedMpdu m_droppedMpduCallback; //!< the dropped MPDU callback
     AckedMpdu m_ackedMpduCallback;     //!< the acknowledged MPDU callback
+
+    // Attempt to add callback for Infrastructure Wifi Mac
+    StaMacReceive m_infMacSTAReceiveCallback; //!< the packet transmission callback
+    MacTxOk m_macTxOkCallback;    //!< the packet transmission without ack callback
+    InfShareInfo m_InfShareInfoCallback; //!< callback for sharing information between FE and IWM
 
     /**
      * Finalize the MAC header of the MPDUs in the given PSDU before transmission. Tasks

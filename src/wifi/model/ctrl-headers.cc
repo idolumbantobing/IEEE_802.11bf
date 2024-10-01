@@ -1111,6 +1111,8 @@ CtrlTriggerUserInfoField::operator=(const CtrlTriggerUserInfoField& userInfo)
     m_bits26To31 = userInfo.m_bits26To31;
     m_ulTargetRssi = userInfo.m_ulTargetRssi;
     m_basicTriggerDependentUserInfo = userInfo.m_basicTriggerDependentUserInfo;
+    // attempt to add channel sounding from ns3.37
+    m_bfrpTriggerDependentUserInfo = userInfo.m_bfrpTriggerDependentUserInfo;
     m_muBarTriggerDependentUserInfo = userInfo.m_muBarTriggerDependentUserInfo;
     return *this;
 }
@@ -1149,8 +1151,9 @@ CtrlTriggerUserInfoField::GetSerializedSize() const
 Buffer::Iterator
 CtrlTriggerUserInfoField::Serialize(Buffer::Iterator start) const
 {
-    NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::BFRP_TRIGGER,
-                    "BFRP Trigger frame is not supported");
+    // attempt to add channel sounding from ns3.37 : fix abort message
+    // NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::BFRP_TRIGGER,
+    //                 "BFRP Trigger frame is not supported");
     NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::GCR_MU_BAR_TRIGGER,
                     "GCR-MU-BAR Trigger frame is not supported");
     NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::NFRP_TRIGGER,
@@ -1194,6 +1197,11 @@ CtrlTriggerUserInfoField::Serialize(Buffer::Iterator start) const
     {
         i.WriteU8(m_basicTriggerDependentUserInfo);
     }
+    // attempt to add channel sounding from ns3.37 : add serialize for BFRP trigger
+    else if (m_triggerType == TriggerFrameType::BFRP_TRIGGER)
+    {
+        i.WriteU8(m_bfrpTriggerDependentUserInfo);
+    }
     else if (m_triggerType == TriggerFrameType::MU_BAR_TRIGGER)
     {
         m_muBarTriggerDependentUserInfo.Serialize(i);
@@ -1206,8 +1214,9 @@ CtrlTriggerUserInfoField::Serialize(Buffer::Iterator start) const
 Buffer::Iterator
 CtrlTriggerUserInfoField::Deserialize(Buffer::Iterator start)
 {
-    NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::BFRP_TRIGGER,
-                    "BFRP Trigger frame is not supported");
+    // attempt to add channel sounding from ns3.37 : fix abort message
+    // NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::BFRP_TRIGGER,
+    //                 "BFRP Trigger frame is not supported");
     NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::GCR_MU_BAR_TRIGGER,
                     "GCR-MU-BAR Trigger frame is not supported");
     NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::NFRP_TRIGGER,
@@ -1249,6 +1258,12 @@ CtrlTriggerUserInfoField::Deserialize(Buffer::Iterator start)
     {
         m_basicTriggerDependentUserInfo = i.ReadU8();
     }
+    // attempt to add channel sounding from ns3.37 : add deserialize for BFRP trigger
+    else if (m_triggerType == TriggerFrameType::BFRP_TRIGGER)
+    {
+        m_bfrpTriggerDependentUserInfo = i.ReadU8();
+    }
+
     else if (m_triggerType == TriggerFrameType::MU_BAR_TRIGGER)
     {
         uint32_t len = m_muBarTriggerDependentUserInfo.Deserialize(i);
@@ -1618,6 +1633,27 @@ CtrlTriggerUserInfoField::GetMuBarTriggerDepUserInfo() const
     return m_muBarTriggerDependentUserInfo;
 }
 
+/*
+*************************************
+Attempt to add Channel Sounding from ns3.37
+new public functions for Control Header
+*************************************
+*/
+
+void
+CtrlTriggerUserInfoField::SetBfrpTriggerDepUserInfo(uint8_t dependentUserInfo)
+{
+    NS_ABORT_MSG_IF(m_triggerType != TriggerFrameType::BFRP_TRIGGER, "Not a BFRP Trigger frame");
+    m_bfrpTriggerDependentUserInfo = dependentUserInfo;
+}
+
+uint8_t
+CtrlTriggerUserInfoField::GetBfrpTriggerDepUserInfo() const
+{
+    NS_ABORT_MSG_IF(m_triggerType != TriggerFrameType::BFRP_TRIGGER, "Not a BFRP Trigger frame");
+    return m_bfrpTriggerDependentUserInfo;
+}
+
 /***********************************
  *       Trigger frame
  ***********************************/
@@ -1774,8 +1810,9 @@ CtrlTriggerHeader::GetSerializedSize() const
 void
 CtrlTriggerHeader::Serialize(Buffer::Iterator start) const
 {
-    NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::BFRP_TRIGGER,
-                    "BFRP Trigger frame is not supported");
+    // attempt to add channel sounding from ns3.37 : fix abort message
+    // NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::BFRP_TRIGGER,
+    //                 "BFRP Trigger frame is not supported");
     NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::GCR_MU_BAR_TRIGGER,
                     "GCR-MU-BAR Trigger frame is not supported");
     NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::NFRP_TRIGGER,
@@ -1831,8 +1868,9 @@ CtrlTriggerHeader::Deserialize(Buffer::Iterator start)
     m_userInfoFields.clear();
     m_padding = 0;
 
-    NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::BFRP_TRIGGER,
-                    "BFRP Trigger frame is not supported");
+    // attempt to add channel sounding from ns3.37 : fix abort message
+    // NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::BFRP_TRIGGER,
+    //                 "BFRP Trigger frame is not supported");
     NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::GCR_MU_BAR_TRIGGER,
                     "GCR-MU-BAR Trigger frame is not supported");
     NS_ABORT_MSG_IF(m_triggerType == TriggerFrameType::NFRP_TRIGGER,
@@ -2247,6 +2285,173 @@ CtrlTriggerHeader::IsValid() const
         prevRus.push_back(ui.GetRuAllocation());
     }
     return true;
+}
+
+/*
+ *************************************
+ Attempt to add Channel Sounding from ns3.37
+ New Class for Channel Sounding
+ *************************************
+*/
+
+/***********************************
+ *       NDPA Frame
+ ***********************************/
+CtrlNdpaHeader::CtrlNdpaHeader()
+    : m_dialogToken(0x40)
+{
+    // format of 1-byte Sounding Dialog Token field: 1-bit reserved subfield + 1-bit HE subfield +
+    // 6-bit Sounding Dialog Token number the 1-bit HE subfield is set as 1 by default to identify
+    // the frame as an HE NDP Announcement frame
+}
+
+CtrlNdpaHeader::~CtrlNdpaHeader()
+{
+}
+
+TypeId
+CtrlNdpaHeader::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::CtrlNdpaHeader")
+                            .SetParent<Header>()
+                            .SetGroupName("Wifi")
+                            .AddConstructor<CtrlNdpaHeader>();
+    return tid;
+}
+
+TypeId
+CtrlNdpaHeader::GetInstanceTypeId() const
+{
+    return GetTypeId();
+}
+
+void
+CtrlNdpaHeader::Print(std::ostream& os) const
+{
+    os << "NDPA frame : "
+       << " Sounding Dialog Token = " << GetSoundingDialogToken();
+
+    for (auto& sta : m_staInfoFields)
+    {
+        os << ", STA_INFO AID =" << sta.m_aid11 << ", Ru Start =" << +sta.m_ruStart
+           << ", Ru End =" << +sta.m_ruEnd << ", Feedback Type and Ng =" << +sta.m_feedbackTypeNg
+           << ", Codebook Size =" << +sta.m_codebookSize;
+    }
+}
+
+void
+CtrlNdpaHeader::AddStaInfoField(const StaInfo& staInfo)
+{
+    m_staInfoFields.push_back(staInfo);
+}
+
+void
+CtrlNdpaHeader::AddStaInfoField()
+{
+    m_staInfoFields.emplace_back();
+}
+
+CtrlNdpaHeader::Iterator
+CtrlNdpaHeader::begin()
+{
+    return m_staInfoFields.begin();
+}
+
+CtrlNdpaHeader::Iterator
+CtrlNdpaHeader::end()
+{
+    return m_staInfoFields.end();
+}
+
+std::size_t
+CtrlNdpaHeader::GetNumStaInfoFields() const
+{
+    return m_staInfoFields.size();
+}
+
+CtrlNdpaHeader::Iterator
+CtrlNdpaHeader::FindStaInfoWithAid(uint16_t aid11)
+{
+    Iterator sta = m_staInfoFields.begin();
+    while (sta->m_aid11 != aid11 && sta != m_staInfoFields.end())
+    {
+        sta++;
+    }
+    return sta;
+}
+
+void
+CtrlNdpaHeader::ClearStaInfo()
+{
+    m_staInfoFields.clear();
+}
+
+void
+CtrlNdpaHeader::SetSoundingDialogToken(uint8_t dialogToken)
+{
+    m_dialogToken = dialogToken;
+}
+
+uint8_t
+CtrlNdpaHeader::GetSoundingDialogToken() const
+{
+    return m_dialogToken;
+}
+
+uint32_t
+CtrlNdpaHeader::GetSerializedSize() const
+{
+    // Sounding Dialog Token  1 byte
+    uint32_t size = 1;
+
+    // Add the size of STA Info subfields
+    size += GetNumStaInfoFields() * 4;
+
+    return size;
+}
+
+void
+CtrlNdpaHeader::Serialize(Buffer::Iterator start) const
+{
+    Buffer::Iterator i = start;
+    i.WriteU8(m_dialogToken);
+
+    for (auto& sta : m_staInfoFields)
+    {
+        uint32_t staInfo = 0;
+        staInfo |= (sta.m_aid11 & 0x07ff);
+        staInfo |= ((sta.m_ruStart & 0x7f) << 11);
+        staInfo |= ((sta.m_ruEnd & 0x7f) << 18);
+        staInfo |= ((sta.m_feedbackTypeNg & 0x03) << 25);
+        staInfo |= ((sta.m_disambiguation & 0x01) << 27);
+        staInfo |= ((sta.m_codebookSize & 0x01) << 28);
+        staInfo |= ((sta.m_nc & 0x07) << 29);
+        i.WriteHtolsbU32(staInfo);
+    }
+}
+
+uint32_t
+CtrlNdpaHeader::Deserialize(Buffer::Iterator start)
+{
+    Buffer::Iterator i = start;
+    m_dialogToken = i.ReadU8();
+
+    m_staInfoFields.clear();
+    while (i.GetRemainingSize() > 0)
+    {
+        uint32_t staInfo = i.ReadLsbtohU32();
+        StaInfo sta;
+        sta.m_aid11 = staInfo & 0x000007ff;
+        sta.m_ruStart = (staInfo >> 11) & 0x0000007f;
+        sta.m_ruEnd = (staInfo >> 18) & 0x0000007f;
+        sta.m_feedbackTypeNg = (staInfo >> 25) & 0x00000003;
+        sta.m_disambiguation = (staInfo >> 27) & 0x00000001;
+        sta.m_codebookSize = (staInfo >> 28) & 0x00000001;
+        sta.m_nc = (staInfo >> 29) & 0x00000007;
+        m_staInfoFields.push_back(sta);
+    }
+
+    return i.GetDistanceFrom(start);
 }
 
 } // namespace ns3

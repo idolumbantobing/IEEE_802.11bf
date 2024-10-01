@@ -22,8 +22,9 @@
 #ifndef STA_WIFI_MAC_H
 #define STA_WIFI_MAC_H
 
+#include "../model/he/channel-sounding.h"
+#include "infrastructure-wifi-mac.h"
 #include "mgt-headers.h"
-#include "wifi-mac.h"
 
 #include <set>
 #include <variant>
@@ -140,7 +141,7 @@ enum WifiPowerManagementMode : uint8_t
  * 7. The transition from Associated to Unassociated occurs if the number
  *    of missed beacons exceeds the threshold.
  */
-class StaWifiMac : public WifiMac
+class StaWifiMac : public InfrastructureWifiMac
 {
   public:
     /// Allow test cases to access private members
@@ -180,6 +181,18 @@ class StaWifiMac : public WifiMac
         uint8_t m_linkId;                  ///< ID of the link used to communicate with the AP
         std::list<SetupLinksInfo>
             m_setupLinks; ///< information about the links to setup between MLDs
+    };
+
+    /**
+     * The current MAC state of the STA.
+     */
+    enum MacState
+    {
+        ASSOCIATED,
+        SCANNING,
+        WAIT_ASSOC_RESP,
+        UNASSOCIATED,
+        REFUSED
     };
 
     /**
@@ -343,6 +356,17 @@ class StaWifiMac : public WifiMac
      */
     int64_t AssignStreams(int64_t stream);
 
+    /*
+    *************************************
+    Attempt to add IEEE 802.11bf support
+    Public functions and attributes for Sta Wifi Mac
+    *************************************
+    */
+
+    void SetManualConnection(bool manual);
+    bool GetManualConnection() const;
+    bool m_manualConnection;
+
   protected:
     /**
      * Structure holding information specific to a single link. Here, the meaning of
@@ -380,19 +404,6 @@ class StaWifiMac : public WifiMac
      * \return a reference to the object casted to StaLinkEntity
      */
     StaLinkEntity& GetStaLink(const std::unique_ptr<WifiMac::LinkEntity>& link) const;
-
-  public:
-    /**
-     * The current MAC state of the STA.
-     */
-    enum MacState
-    {
-        ASSOCIATED,
-        SCANNING,
-        WAIT_ASSOC_RESP,
-        UNASSOCIATED,
-        REFUSED
-    };
 
   private:
     /**

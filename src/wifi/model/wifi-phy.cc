@@ -114,13 +114,13 @@ WifiPhy::GetTypeId()
                           UintegerValue(0),
                           MakeUintegerAccessor(&WifiPhy::GetChannelNumber),
                           MakeUintegerChecker<uint8_t>(0, 233))
-            .AddAttribute(
-                "ChannelWidth",
-                "The width in MHz of the current operating channel (5, 10, 20, 22, 40, 80 or 160).",
-                TypeId::ATTR_GET,
-                UintegerValue(0),
-                MakeUintegerAccessor(&WifiPhy::GetChannelWidth),
-                MakeUintegerChecker<uint16_t>(5, 160))
+            .AddAttribute("ChannelWidth",
+                          "The width in MHz of the current operating channel (5, 10, 20, 22, "
+                          "40, 80 or 160).",
+                          TypeId::ATTR_GET,
+                          UintegerValue(0),
+                          MakeUintegerAccessor(&WifiPhy::GetChannelWidth),
+                          MakeUintegerChecker<uint16_t>(5, 160))
             .AddAttribute(
                 "Primary20MHzIndex",
                 "The index of the primary 20 MHz channel within the current operating channel "
@@ -191,7 +191,8 @@ WifiPhy::GetTypeId()
                 "\"the difference in decibels (dB) between"
                 " the noise output of the actual receiver to the noise output of an "
                 " ideal receiver with the same overall gain and bandwidth when the receivers "
-                " are connected to sources at the standard noise temperature T0 (usually 290 K)\".",
+                " are connected to sources at the standard noise temperature T0 (usually 290 "
+                "K)\".",
                 DoubleValue(7),
                 MakeDoubleAccessor(&WifiPhy::SetRxNoiseFigure),
                 MakeDoubleChecker<double>())
@@ -337,7 +338,13 @@ WifiPhy::GetTypeId()
                             "Trace source simulating the capability of a wifi device "
                             "in monitor mode to sniff all frames being transmitted",
                             MakeTraceSourceAccessor(&WifiPhy::m_phyMonitorSniffTxTrace),
-                            "ns3::WifiPhy::MonitorSnifferTxTracedCallback");
+                            "ns3::WifiPhy::MonitorSnifferTxTracedCallback")
+            .AddTraceSource(
+                "MonitorChannelAccess",
+                "Trace source simulating the capability of a wifi device in monitor mode "
+                "to sniff all channel access events",
+                MakeTraceSourceAccessor(&WifiPhy::m_phyMonitorChannelAccessTrace),
+                "ns3::WifiPhy::MonitorChannelAccessTracedCallback");
     return tid;
 }
 
@@ -947,6 +954,14 @@ WifiPhy::Configure80211be()
 }
 
 void
+WifiPhy::Configure80211bf()
+{
+    NS_LOG_FUNCTION(this);
+    // Since current implementation use the same PHY as 802.11ax, we can just call Configure80211ax
+    Configure80211ax();
+}
+
+void
 WifiPhy::ConfigureStandard(WifiStandard standard)
 {
     NS_LOG_FUNCTION(this << standard);
@@ -993,6 +1008,9 @@ WifiPhy::ConfigureStandard(WifiStandard standard)
         break;
     case WIFI_STANDARD_80211be:
         Configure80211be();
+        break;
+    case WIFI_STANDARD_80211bf:
+        Configure80211bf();
         break;
     case WIFI_STANDARD_UNSPECIFIED:
     default:
@@ -1722,8 +1740,54 @@ WifiPhy::Send(WifiConstPsduMap psdus, const WifiTxVector& txVector)
      *    prevent it.
      *  - we are idle
      */
+
     NS_ASSERT(!m_state->IsStateTx() && !m_state->IsStateSwitching());
     NS_ASSERT(m_endTxEvent.IsExpired());
+    std::string type = "";
+    if (psdus.size() == 1)
+    {
+        type = " (Singe User) ";
+        for (auto& it : psdus)
+        {
+            NS_LOG_INFO("[link=0][mac=" << it.second->GetAddr2() << "]" << " |");
+            NS_LOG_INFO("[link=0][mac="
+                        << it.second->GetAddr2() << "]"
+                        << "  ---------------------------------------------------------------");
+            NS_LOG_INFO("[link=0][mac=" << it.second->GetAddr2() << "] | " << Simulator::Now()
+                                        << " Sending : " << type << "[STAID=" << it.first << ", "
+                                        << *it.second << "]");
+            NS_LOG_INFO("[link=0][mac="
+                        << it.second->GetAddr2() << "]"
+                        << "  ---------------------------------------------------------------");
+            NS_LOG_INFO("[link=0][mac=" << it.second->GetAddr2() << "]" << " |");
+        }
+    }
+    else
+    {
+        type = " (Multiple User) ";
+        for (auto& it : psdus)
+        {
+            NS_LOG_INFO("[link=0][mac=" << it.second->GetAddr2() << "]" << " |");
+            NS_LOG_INFO("[link=0][mac="
+                        << it.second->GetAddr2() << "]"
+                        << "  ---------------------------------------------------------------");
+            break;
+        }
+        for (auto& it : psdus)
+        {
+            NS_LOG_INFO("[link=0][mac=" << it.second->GetAddr2() << "] | " << Simulator::Now()
+                                        << " Sending : " << type << "[STAID=" << it.first << ", "
+                                        << *it.second << "]");
+        }
+        for (auto& it : psdus)
+        {
+            NS_LOG_INFO("[link=0][mac="
+                        << it.second->GetAddr2() << "]"
+                        << "  ---------------------------------------------------------------");
+            NS_LOG_INFO("[link=0][mac=" << it.second->GetAddr2() << "]" << " |");
+            break;
+        }
+    }
 
     if (!txVector.IsValid())
     {
@@ -1821,7 +1885,6 @@ WifiPhy::Send(WifiConstPsduMap psdus, const WifiTxVector& txVector)
 
     m_endTxEvent =
         Simulator::Schedule(txDuration, &WifiPhy::NotifyTxEnd, this, psdus); // TODO: fix for MU
-
     StartTx(ppdu);
     ppdu->ResetTxVector();
 
@@ -2188,12 +2251,13 @@ WifiPhy::GetTxPowerForTransmission(Ptr<const WifiPpdu> ppdu) const
     uint16_t channelWidth = ppdu->GetTxChannelWidth();
     double txPowerDbmPerMhz =
         (txPowerDbm + GetTxGain()) - RatioToDb(channelWidth); // account for antenna gain since EIRP
-    NS_LOG_INFO("txPowerDbm=" << txPowerDbm << " with txPowerDbmPerMhz=" << txPowerDbmPerMhz
-                              << " over " << channelWidth << " MHz");
+    // Note : Logging below are commented
+    // NS_LOG_INFO("txPowerDbm=" << txPowerDbm << " with txPowerDbmPerMhz=" << txPowerDbmPerMhz
+    //                           << " over " << channelWidth << " MHz");
     txPowerDbm = std::min(txPowerDbmPerMhz, m_powerDensityLimit) + RatioToDb(channelWidth);
     txPowerDbm -= GetTxGain(); // remove antenna gain since will be added right afterwards
-    NS_LOG_INFO("txPowerDbm=" << txPowerDbm
-                              << " after applying m_powerDensityLimit=" << m_powerDensityLimit);
+    // NS_LOG_INFO("txPowerDbm=" << txPowerDbm
+    //                           << " after applying m_powerDensityLimit=" << m_powerDensityLimit);
     return txPowerDbm;
 }
 
@@ -2217,8 +2281,8 @@ WifiPhy::AssignStreams(int64_t stream)
 std::ostream&
 operator<<(std::ostream& os, RxSignalInfo rxSignalInfo)
 {
-    os << "SNR:" << RatioToDb(rxSignalInfo.snr) << " dB"
-       << ", RSSI:" << rxSignalInfo.rssi << " dBm";
+    os << "SNR:" << RatioToDb(rxSignalInfo.snr) << " dB" << ", RSSI:" << rxSignalInfo.rssi
+       << " dBm";
     return os;
 }
 
@@ -2253,6 +2317,7 @@ WifiPhy::GetSubcarrierSpacing() const
         break;
     case WIFI_STANDARD_80211ax:
     case WIFI_STANDARD_80211be:
+    case WIFI_STANDARD_80211bf:
         subcarrierSpacing = 78125;
         break;
     default:
@@ -2262,4 +2327,17 @@ WifiPhy::GetSubcarrierSpacing() const
     return subcarrierSpacing;
 }
 
+// '''''''''''''''''''''''' //
+//  NEW, ADD, MODIFY
+void
+WifiPhy::NotifyMonitorChannelAccess(ns3::Mac48Address ApMacAddress,
+                                    ns3::Time currentTime,
+                                    bool RequestedGranted)
+{
+    NS_LOG_FUNCTION(this);
+    if (!m_phyMonitorChannelAccessTrace.IsEmpty())
+    {
+        m_phyMonitorChannelAccessTrace(ApMacAddress, currentTime, RequestedGranted);
+    }
+}
 } // namespace ns3

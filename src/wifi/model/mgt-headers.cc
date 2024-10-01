@@ -604,6 +604,11 @@ WifiActionHeader::SetAction(WifiActionHeader::CategoryValue type,
     m_category = static_cast<uint8_t>(type);
     switch (type)
     {
+        // attempt to implement channel sounding action frame
+    case HE: {
+        m_actionValue = static_cast<uint8_t>(action.he);
+        break;
+    }
     case QOS: {
         m_actionValue = static_cast<uint8_t>(action.qos);
         break;
@@ -659,6 +664,9 @@ WifiActionHeader::GetCategory() const
 {
     switch (m_category)
     {
+        // attempt to implement channel sounding action frame
+    case HE:
+        return HE;
     case QOS:
         return QOS;
     case BLOCK_ACK:
@@ -1448,7 +1456,7 @@ MgtAddBaRequestHeader::GetParameterSet() const
 void
 MgtAddBaRequestHeader::SetParameterSet(uint16_t params)
 {
-    m_amsduSupport = (params)&0x01;
+    m_amsduSupport = (params) & 0x01;
     m_policy = (params >> 1) & 0x01;
     m_tid = (params >> 2) & 0x0f;
     m_bufferSize = (params >> 6) & 0x03ff;
@@ -1614,7 +1622,7 @@ MgtAddBaResponseHeader::GetParameterSet() const
 void
 MgtAddBaResponseHeader::SetParameterSet(uint16_t params)
 {
-    m_amsduSupport = (params)&0x01;
+    m_amsduSupport = (params) & 0x01;
     m_policy = (params >> 1) & 0x01;
     m_tid = (params >> 2) & 0x0f;
     m_bufferSize = (params >> 6) & 0x03ff;
@@ -1883,6 +1891,1428 @@ MgtEmlOmn::GetLinkBitmap() const
         bitmap >>= 1;
     }
     return list;
+}
+
+/*
+*************************************
+Attempt to add Channel Sounding from ns3.37
+new Header for Wifi Management Header
+*************************************
+*/
+
+/***************************************************
+ *                 HE MIMO Control field
+ ****************************************************/
+NS_OBJECT_ENSURE_REGISTERED(HeMimoControlHeader);
+
+HeMimoControlHeader::HeMimoControlHeader()
+    : m_remainingFeedbackSegments(0),
+      m_firstFeedbackSegment(1),
+      m_soundingDialogToken(1),
+      m_disallowedSubchannelBitmapPresent(0),
+      m_disallowedSubchannelBitmap(0)
+{
+}
+
+HeMimoControlHeader::HeMimoControlHeader(CtrlNdpaHeader ndpaHeader, uint16_t aid11)
+{
+    m_soundingDialogToken = ndpaHeader.GetSoundingDialogToken();
+    m_nc = ndpaHeader.FindStaInfoWithAid(aid11)->m_nc;
+    m_ruStart = ndpaHeader.FindStaInfoWithAid(aid11)->m_ruStart;
+    m_ruEnd = ndpaHeader.FindStaInfoWithAid(aid11)->m_ruEnd;
+    m_codebookInfo = ndpaHeader.FindStaInfoWithAid(aid11)->m_codebookSize;
+    m_remainingFeedbackSegments = 0;
+    m_firstFeedbackSegment = 0;
+    m_disallowedSubchannelBitmapPresent = 0;
+    m_disallowedSubchannelBitmap = 0;
+
+    uint32_t feedbackTypeNg = ndpaHeader.FindStaInfoWithAid(aid11)->m_feedbackTypeNg;
+    switch (feedbackTypeNg)
+    {
+    case 0:
+        m_feedbackType = 0;
+        m_grouping = 0;
+        break;
+    case 1:
+        m_feedbackType = 0;
+        m_grouping = 1;
+        break;
+    case 2:
+        m_feedbackType = 1;
+        m_grouping = 0;
+        break;
+    case 3:
+        switch (m_codebookInfo)
+        {
+        case 0:
+            m_feedbackType = 2;
+            NS_FATAL_ERROR("Unsupported type of channel sounding feedback: CQI.");
+            break;
+        case 1:
+            m_feedbackType = 1;
+            m_grouping = 1;
+            break;
+        default:
+            NS_FATAL_ERROR("Unsupported codebook size subfield in NDPA frame.");
+            break;
+        }
+        break;
+    default:
+        NS_FATAL_ERROR("Unsupported Feedback Type and Ng subfield in NDPA frame.");
+        break;
+    }
+}
+
+HeMimoControlHeader::HeMimoControlHeader(const HeMimoControlHeader& heMimoControlHeader)
+{
+    m_nc = heMimoControlHeader.m_nc;
+    m_nr = heMimoControlHeader.m_nr;
+    m_bw = heMimoControlHeader.m_bw;
+    m_grouping = heMimoControlHeader.m_grouping;
+    m_codebookInfo = heMimoControlHeader.m_codebookInfo;
+    m_feedbackType = heMimoControlHeader.m_feedbackType;
+    m_remainingFeedbackSegments = heMimoControlHeader.m_remainingFeedbackSegments;
+    m_firstFeedbackSegment = heMimoControlHeader.m_firstFeedbackSegment;
+    m_ruStart = heMimoControlHeader.m_ruStart;
+    m_ruEnd = heMimoControlHeader.m_ruEnd;
+    m_soundingDialogToken = heMimoControlHeader.m_soundingDialogToken;
+    m_disallowedSubchannelBitmapPresent = heMimoControlHeader.m_disallowedSubchannelBitmapPresent;
+    m_disallowedSubchannelBitmap = heMimoControlHeader.m_disallowedSubchannelBitmap;
+}
+
+HeMimoControlHeader::~HeMimoControlHeader()
+{
+}
+
+TypeId
+HeMimoControlHeader::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::HeMimoControlHeader")
+                            .SetParent<Header>()
+                            .SetGroupName("Wifi")
+                            .AddConstructor<HeMimoControlHeader>();
+    return tid;
+}
+
+TypeId
+HeMimoControlHeader::GetInstanceTypeId() const
+{
+    return GetTypeId();
+}
+
+void
+HeMimoControlHeader::Print(std::ostream& os) const
+{
+}
+
+uint32_t
+HeMimoControlHeader::GetSerializedSize() const
+{
+    if (m_disallowedSubchannelBitmapPresent)
+    {
+        return 7;
+    }
+    else
+    {
+        return 5;
+    }
+}
+
+void
+HeMimoControlHeader::Serialize(Buffer::Iterator start) const
+{
+    Buffer::Iterator i = start;
+    uint8_t buffer = ((m_nc & 0x07) << 5) | ((m_nr & 0x07) << 2) | ((m_bw & 0x03));
+    i.WriteU8(buffer);
+
+    buffer = ((m_grouping & 0x01) << 7) | ((m_codebookInfo & 0x01) << 6) |
+             ((m_feedbackType & 0x03) << 4) | ((m_remainingFeedbackSegments & 0x07) << 1) |
+             (m_firstFeedbackSegment & 0x01);
+    i.WriteU8(buffer);
+
+    buffer = ((m_ruStart & 0x7f) << 1) | ((m_ruEnd & 0x7f) >> 6);
+    i.WriteU8(buffer);
+
+    buffer = ((m_ruEnd & 0x7f) << 2) | ((m_soundingDialogToken & 0x3f) >> 4);
+    i.WriteU8(buffer);
+
+    buffer =
+        ((m_soundingDialogToken & 0x3f) << 4) | ((m_disallowedSubchannelBitmapPresent & 0x01) << 3);
+    i.WriteU8(buffer);
+
+    if (m_disallowedSubchannelBitmapPresent)
+    {
+        buffer = m_disallowedSubchannelBitmap & 0xff;
+        i.WriteU8(buffer);
+        i.WriteU8(0); // zero padding
+    }
+}
+
+uint32_t
+HeMimoControlHeader::Deserialize(Buffer::Iterator start)
+{
+    Buffer::Iterator i = start;
+
+    uint8_t buffer0, buffer1, buffer2, buffer3, buffer4;
+    buffer0 = i.ReadU8();
+    m_nc = (buffer0 >> 5) & 0x07;
+    m_nr = (buffer0 >> 2) & 0x07;
+    m_bw = buffer0 & 0x03;
+
+    buffer1 = i.ReadU8();
+    m_grouping = (buffer1 >> 7) & 0x01;
+    m_codebookInfo = (buffer1 >> 6) & 0x01;
+    m_feedbackType = (buffer1 >> 4) & 0x03;
+    m_remainingFeedbackSegments = (buffer1 >> 1) & 0x07;
+    m_firstFeedbackSegment = buffer1 & 0x01;
+
+    buffer2 = i.ReadU8();
+    buffer3 = i.ReadU8();
+    buffer4 = i.ReadU8();
+    m_ruStart = (buffer2 >> 1) & 0x7f;
+    m_ruEnd = ((buffer2 << 6) & 0x40) | ((buffer3 >> 2) & 0x3f);
+    m_soundingDialogToken = ((buffer3 << 4) & 0x30) | ((buffer4 >> 4) & 0x0f);
+    m_disallowedSubchannelBitmapPresent = (buffer4 >> 3) & 0x01;
+
+    if (m_disallowedSubchannelBitmapPresent)
+    {
+        m_disallowedSubchannelBitmap = i.ReadU8();
+        i.ReadU8(); // zero padding
+    }
+
+    return i.GetDistanceFrom(start);
+}
+
+void
+HeMimoControlHeader::SetNc(uint8_t nc)
+{
+    m_nc = nc;
+}
+
+uint8_t
+HeMimoControlHeader::GetNc() const
+{
+    return m_nc;
+}
+
+void
+HeMimoControlHeader::SetNr(uint8_t nr)
+{
+    m_nr = nr;
+}
+
+uint8_t
+HeMimoControlHeader::GetNr() const
+{
+    return m_nr;
+}
+
+void
+HeMimoControlHeader::SetBw(uint16_t bw)
+{
+    NS_ASSERT(bw == 20 || bw == 40 || bw == 80 || bw == 160);
+    switch (bw)
+    {
+    case 20:
+        m_bw = 0;
+        break;
+    case 40:
+        m_bw = 1;
+        break;
+    case 80:
+        m_bw = 2;
+        break;
+    case 160:
+        m_bw = 3;
+        break;
+    default:
+        NS_FATAL_ERROR("Improper channel bandwidth.");
+        break;
+    }
+}
+
+uint16_t
+HeMimoControlHeader::GetBw() const
+{
+    NS_ASSERT(m_bw <= 3);
+    switch (m_bw)
+    {
+    case 0:
+        return 20;
+    case 1:
+        return 40;
+    case 2:
+        return 80;
+    case 3:
+        return 160;
+    default:
+        NS_FATAL_ERROR("Improper channel bandwidth in HE MIMO Control Info.");
+        return 20;
+    }
+}
+
+void
+HeMimoControlHeader::SetGrouping(uint8_t ng)
+{
+    NS_ASSERT(ng == 4 || ng == 16);
+    switch (ng)
+    {
+    case 4:
+        m_grouping = 0;
+        break;
+    case 16:
+        m_grouping = 1;
+        break;
+    default:
+        NS_FATAL_ERROR("Improper subcarrier grouping parameter Ng.");
+        break;
+    }
+}
+
+uint8_t
+HeMimoControlHeader::GetNg() const
+{
+    NS_ASSERT(m_grouping <= 1);
+    switch (m_grouping)
+    {
+    case 0:
+        return 4;
+    case 1:
+        return 16;
+    default:
+        NS_FATAL_ERROR("Improper Grouping subfield in HE MIMO Control field");
+        break;
+    }
+}
+
+void
+HeMimoControlHeader::SetCodebookInfo(uint8_t codebookInfo)
+{
+    NS_ASSERT(codebookInfo <= 1);
+    m_codebookInfo = codebookInfo;
+}
+
+uint8_t
+HeMimoControlHeader::GetCodebookInfo() const
+{
+    NS_ASSERT(m_codebookInfo <= 1);
+    return m_codebookInfo;
+}
+
+void
+HeMimoControlHeader::SetFeedbackType(HeMimoControlHeader::CsType feedbackType)
+{
+    m_feedbackType = feedbackType;
+}
+
+HeMimoControlHeader::CsType
+HeMimoControlHeader::GetFeedbackType() const
+{
+    NS_ASSERT(m_feedbackType <= 2);
+    return CsType(m_feedbackType);
+}
+
+void
+HeMimoControlHeader::SetRuStart(uint8_t ruStart)
+{
+    m_ruStart = ruStart;
+}
+
+uint8_t
+HeMimoControlHeader::GetRuStart() const
+{
+    return m_ruStart;
+}
+
+void
+HeMimoControlHeader::SetRuEnd(uint8_t ruEnd)
+{
+    m_ruEnd = ruEnd;
+}
+
+uint8_t
+HeMimoControlHeader::GetRuEnd() const
+{
+    return m_ruEnd;
+}
+
+void
+HeMimoControlHeader::SetRemainingFeedback(uint8_t remainingFeedback)
+{
+    m_remainingFeedbackSegments = remainingFeedback;
+}
+
+uint8_t
+HeMimoControlHeader::GetRemainingFeedback() const
+{
+    return m_remainingFeedbackSegments;
+}
+
+void
+HeMimoControlHeader::SetFirstFeedback(bool firstFeedback)
+{
+    m_firstFeedbackSegment = firstFeedback;
+}
+
+uint8_t
+HeMimoControlHeader::GetFirstFeedback() const
+{
+    NS_ASSERT(m_firstFeedbackSegment <= 1);
+    return m_firstFeedbackSegment;
+}
+
+void
+HeMimoControlHeader::SetSoundingDialogToken(uint8_t soundingDialogToken)
+{
+    m_soundingDialogToken = soundingDialogToken;
+}
+
+uint8_t
+HeMimoControlHeader::GetSoundingDialogToken() const
+{
+    return m_soundingDialogToken;
+}
+
+void
+HeMimoControlHeader::SetDisallowedSubchannelBitmapPresent(bool present)
+{
+    m_disallowedSubchannelBitmapPresent = present;
+}
+
+bool
+HeMimoControlHeader::GetDisallowedSubchannelBitmapPresent() const
+{
+    return m_disallowedSubchannelBitmapPresent;
+}
+
+void
+HeMimoControlHeader::SetDisallowedSubchannelBitmap(uint8_t bitmap)
+{
+    m_disallowedSubchannelBitmap = bitmap;
+}
+
+uint8_t
+HeMimoControlHeader::GetDisallowedSubchannelBitmap() const
+{
+    return m_disallowedSubchannelBitmap;
+}
+
+/***************************************************
+ *                 HE Compressed Beamforming Report field
+ ****************************************************/
+NS_OBJECT_ENSURE_REGISTERED(HeCompressedBfReport);
+
+HeCompressedBfReport::HeCompressedBfReport()
+{
+}
+
+HeCompressedBfReport::HeCompressedBfReport(const HeMimoControlHeader& heMimoControlHeader)
+{
+    // Note : Switch off first the BF report
+
+    m_nc = heMimoControlHeader.GetNc() + 1;
+    m_nr = heMimoControlHeader.GetNr() + 1;
+    m_na = CalculateNa(m_nc, m_nr);
+    m_ns = GetNSubcarriers(heMimoControlHeader.GetRuStart(),
+                           heMimoControlHeader.GetRuEnd(),
+                           heMimoControlHeader.GetNg());
+    std::tie(m_bits1, m_bits2) = GetAngleBits(heMimoControlHeader);
+}
+
+HeCompressedBfReport::~HeCompressedBfReport()
+{
+}
+
+TypeId
+HeCompressedBfReport::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::HeCompressedBfReport")
+                            .SetParent<Header>()
+                            .SetGroupName("Wifi")
+                            .AddConstructor<HeCompressedBfReport>();
+    return tid;
+}
+
+TypeId
+HeCompressedBfReport::GetInstanceTypeId() const
+{
+    return GetTypeId();
+}
+
+void
+HeCompressedBfReport::Print(std::ostream& os) const
+{
+}
+
+uint32_t
+HeCompressedBfReport::GetSerializedSize() const
+{
+    return m_nc + ceil((m_na / 2 * (m_bits1 + m_bits2) * m_ns) / 8.0);
+}
+
+uint8_t
+HeCompressedBfReport::GetNc() const
+{
+    return m_nc;
+}
+
+uint8_t
+HeCompressedBfReport::GetNr() const
+{
+    return m_nr;
+}
+
+uint16_t
+HeCompressedBfReport::GetNs() const
+{
+    return m_ns;
+}
+
+uint8_t
+HeCompressedBfReport::GetNa() const
+{
+    return m_na;
+}
+
+uint8_t
+HeCompressedBfReport::GetBits1() const
+{
+    return m_bits1;
+}
+
+uint8_t
+HeCompressedBfReport::GetBits2() const
+{
+    return m_bits2;
+}
+
+std::tuple<uint8_t, uint8_t>
+HeCompressedBfReport::GetAngleBits(const HeMimoControlHeader& heMimoControlHeader)
+{
+    uint8_t bits1 = 0;
+    uint8_t bits2 = 0;
+    switch (heMimoControlHeader.GetFeedbackType())
+    {
+    case HeMimoControlHeader::SU:
+        switch (heMimoControlHeader.GetCodebookInfo())
+        {
+        case 1:
+            bits1 = 6;
+            bits2 = 4;
+            break;
+        case 0:
+            bits1 = 4;
+            bits2 = 2;
+            break;
+        default:
+            NS_FATAL_ERROR("Wrong codebook size.");
+            break;
+        }
+        break;
+    case HeMimoControlHeader::MU:
+        switch (heMimoControlHeader.GetNg())
+        {
+        case 4:
+            switch (heMimoControlHeader.GetCodebookInfo())
+            {
+            case 0:
+                bits1 = 7;
+                bits2 = 5;
+                break;
+            case 1:
+                bits1 = 9;
+                bits2 = 7;
+                break;
+            default:
+                NS_FATAL_ERROR("Unsupported codebook size for MU case");
+                break;
+            }
+            break;
+        case 16:
+            bits1 = 9;
+            bits2 = 7;
+            break;
+        default:
+            NS_FATAL_ERROR("Unsupported subcarrier grouping parameter Ng for MU case");
+            break;
+        }
+        break;
+    default:
+        NS_FATAL_ERROR("Feedback type of channel sounding is not supported.");
+        break;
+    }
+    return std::make_tuple(bits1, bits2);
+}
+
+void
+HeCompressedBfReport::SetHeMimoControlHeader(const HeMimoControlHeader& heMimoControlHeader)
+{
+    m_nc = heMimoControlHeader.GetNc() + 1;
+    m_nr = heMimoControlHeader.GetNr() + 1;
+    m_na = CalculateNa(m_nc, m_nr);
+    m_ns = GetNSubcarriers(heMimoControlHeader.GetRuStart(),
+                           heMimoControlHeader.GetRuEnd(),
+                           heMimoControlHeader.GetNg());
+
+    switch (heMimoControlHeader.GetFeedbackType())
+    {
+    case 0:
+        switch (heMimoControlHeader.GetCodebookInfo())
+        {
+        case 1:
+            m_bits1 = 6;
+            m_bits2 = 4;
+            break;
+        case 0:
+            m_bits1 = 4;
+            m_bits2 = 2;
+            break;
+        default:
+            NS_FATAL_ERROR("Wrong codebook size.");
+            break;
+        }
+        break;
+    case 1:
+        switch (heMimoControlHeader.GetNg())
+        {
+        case 4:
+            switch (heMimoControlHeader.GetCodebookInfo())
+            {
+            case 0:
+                m_bits1 = 7;
+                m_bits2 = 5;
+                break;
+            case 1:
+                m_bits1 = 9;
+                m_bits2 = 7;
+                break;
+            default:
+                NS_FATAL_ERROR("Unsupported codebook size for MU case");
+                break;
+            }
+            break;
+        case 16:
+            m_bits1 = 9;
+            m_bits2 = 7;
+            break;
+        default:
+            NS_FATAL_ERROR("Unsupported subcarrier grouping parameter Ng for MU case");
+            break;
+        }
+        break;
+    default:
+        NS_FATAL_ERROR("Feedback type of channel sounding is not supported.");
+        break;
+    }
+}
+
+void
+HeCompressedBfReport::SetChannelInfo(ChannelInfo channelInfo)
+{
+    m_channelInfo.m_stStreamSnr = channelInfo.m_stStreamSnr;
+    m_channelInfo.m_phi = channelInfo.m_phi;
+    m_channelInfo.m_psi = channelInfo.m_psi;
+}
+
+HeCompressedBfReport::ChannelInfo
+HeCompressedBfReport::GetChannelInfo()
+{
+    return m_channelInfo;
+}
+
+std::tuple<std::vector<uint16_t>, std::vector<uint8_t>>
+HeCompressedBfReport::PrepareWriteBfBuffer() const
+{
+    // Total number of values that needs to be write into the buffer of compressed beamforming
+    // report
+    uint16_t numValues = m_nc + m_ns * m_na;
+    // A vector containing all the values that needs to be write into the buffer
+    std::vector<uint16_t> values(numValues, 0);
+    // A vector containing the bits needed to quantize each value
+    std::vector<uint8_t> bits(numValues, 0);
+
+    uint16_t idxValues = 0;
+    for (idxValues = 0; idxValues < m_nc; idxValues++)
+    {
+        values[idxValues] = m_channelInfo.m_stStreamSnr[idxValues];
+        bits[idxValues] = 8;
+    }
+
+    idxValues = m_nc;
+    switch (m_na)
+    {
+    case 2:
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            for (uint8_t j = 0; j < m_na / 2; j++)
+            {
+                values[idxValues] = m_channelInfo.m_phi[i][j];
+                bits[idxValues] = m_bits1;
+
+                values[idxValues + 1] = m_channelInfo.m_psi[i][j];
+                bits[idxValues + 1] = m_bits2;
+            }
+            idxValues = idxValues + m_na;
+        }
+
+        break;
+    case 4:
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            values[idxValues] = m_channelInfo.m_phi[i][0];
+            bits[idxValues] = m_bits1;
+
+            values[idxValues + 1] = m_channelInfo.m_phi[i][1];
+            bits[idxValues + 1] = m_bits1;
+
+            values[idxValues + 2] = m_channelInfo.m_psi[i][0];
+            bits[idxValues + 2] = m_bits2;
+
+            values[idxValues + 3] = m_channelInfo.m_psi[i][1];
+            bits[idxValues + 3] = m_bits2;
+
+            idxValues = idxValues + m_na;
+        }
+        break;
+    case 6:
+        if (m_nr == 3)
+        {
+            for (uint16_t i = 0; i < m_ns; i++)
+            {
+                values[idxValues] = m_channelInfo.m_phi[i][0];
+                bits[idxValues] = m_bits1;
+
+                values[idxValues + 1] = m_channelInfo.m_phi[i][1];
+                bits[idxValues + 1] = m_bits1;
+
+                values[idxValues + 2] = m_channelInfo.m_psi[i][0];
+                bits[idxValues + 2] = m_bits2;
+
+                values[idxValues + 3] = m_channelInfo.m_psi[i][1];
+                bits[idxValues + 3] = m_bits2;
+
+                values[idxValues + 4] = m_channelInfo.m_phi[i][2];
+                bits[idxValues + 4] = m_bits1;
+
+                values[idxValues + 5] = m_channelInfo.m_psi[i][2];
+                bits[idxValues + 5] = m_bits2;
+
+                idxValues = idxValues + m_na;
+            }
+        }
+        else if (m_nr == 4)
+        {
+            for (uint16_t i = 0; i < m_ns; i++)
+            {
+                values[idxValues] = m_channelInfo.m_phi[i][0];
+                bits[idxValues] = m_bits1;
+
+                values[idxValues + 1] = m_channelInfo.m_phi[i][1];
+                bits[idxValues + 1] = m_bits1;
+
+                values[idxValues + 2] = m_channelInfo.m_phi[i][2];
+                bits[idxValues + 2] = m_bits1;
+
+                values[idxValues + 3] = m_channelInfo.m_psi[i][0];
+                bits[idxValues + 3] = m_bits2;
+
+                values[idxValues + 4] = m_channelInfo.m_psi[i][1];
+                bits[idxValues + 4] = m_bits2;
+
+                values[idxValues + 5] = m_channelInfo.m_psi[i][2];
+                bits[idxValues + 5] = m_bits2;
+
+                idxValues = idxValues + m_na;
+            }
+        }
+        else
+        {
+            NS_FATAL_ERROR("Improper number of angles");
+        }
+        break;
+    case 10:
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            values[idxValues] = m_channelInfo.m_phi[i][0];
+            bits[idxValues] = m_bits1;
+
+            values[idxValues + 1] = m_channelInfo.m_phi[i][1];
+            bits[idxValues + 1] = m_bits1;
+
+            values[idxValues + 2] = m_channelInfo.m_phi[i][2];
+            bits[idxValues + 2] = m_bits1;
+
+            values[idxValues + 3] = m_channelInfo.m_psi[i][0];
+            bits[idxValues + 3] = m_bits2;
+
+            values[idxValues + 4] = m_channelInfo.m_psi[i][1];
+            bits[idxValues + 4] = m_bits2;
+
+            values[idxValues + 5] = m_channelInfo.m_psi[i][2];
+            bits[idxValues + 5] = m_bits2;
+
+            values[idxValues + 6] = m_channelInfo.m_phi[i][3];
+            bits[idxValues + 6] = m_bits1;
+
+            values[idxValues + 7] = m_channelInfo.m_phi[i][4];
+            bits[idxValues + 7] = m_bits1;
+
+            values[idxValues + 8] = m_channelInfo.m_psi[i][3];
+            bits[idxValues + 8] = m_bits2;
+
+            values[idxValues + 9] = m_channelInfo.m_psi[i][4];
+            bits[idxValues + 9] = m_bits2;
+
+            idxValues = idxValues + m_na;
+        }
+        break;
+    case 12:
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            values[idxValues] = m_channelInfo.m_phi[i][0];
+            bits[idxValues] = m_bits1;
+
+            values[idxValues + 1] = m_channelInfo.m_phi[i][1];
+            bits[idxValues + 1] = m_bits1;
+
+            values[idxValues + 2] = m_channelInfo.m_phi[i][2];
+            bits[idxValues + 2] = m_bits1;
+
+            values[idxValues + 3] = m_channelInfo.m_psi[i][0];
+            bits[idxValues + 3] = m_bits2;
+
+            values[idxValues + 4] = m_channelInfo.m_psi[i][1];
+            bits[idxValues + 4] = m_bits2;
+
+            values[idxValues + 5] = m_channelInfo.m_psi[i][2];
+            bits[idxValues + 5] = m_bits2;
+
+            values[idxValues + 6] = m_channelInfo.m_phi[i][3];
+            bits[idxValues + 6] = m_bits1;
+
+            values[idxValues + 7] = m_channelInfo.m_phi[i][4];
+            bits[idxValues + 7] = m_bits1;
+
+            values[idxValues + 8] = m_channelInfo.m_psi[i][3];
+            bits[idxValues + 8] = m_bits2;
+
+            values[idxValues + 9] = m_channelInfo.m_psi[i][4];
+            bits[idxValues + 9] = m_bits2;
+
+            values[idxValues + 10] = m_channelInfo.m_phi[i][5];
+            bits[idxValues + 10] = m_bits1;
+
+            values[idxValues + 11] = m_channelInfo.m_psi[i][5];
+            bits[idxValues + 11] = m_bits2;
+
+            idxValues = idxValues + m_na;
+        }
+        break;
+    default:
+        NS_FATAL_ERROR("Improper number of angles");
+    }
+    return std::make_tuple(values, bits);
+}
+
+std::vector<uint8_t>
+HeCompressedBfReport::WriteBfReportBuffer(std::vector<uint16_t> values,
+                                          std::vector<uint8_t> bits) const
+{
+    // total number of values that will be write into the buffer
+    uint16_t num = values.size();
+
+    // total number of bytes that will be write into the buffer
+    uint16_t numBytes = 0;
+    for (uint16_t i = 0; i < num; i++)
+    {
+        numBytes += bits[i];
+    }
+    numBytes = ceil(numBytes / 8.0);
+
+    // Create buffer that contains beamforming report information
+    std::vector<uint8_t> buffer(numBytes, 0);
+
+    // index of the current byte in the buffer
+    uint16_t idxBuffer = 0;
+    // remaining bits of the current byte in the buffer
+    uint8_t remainingBits = 8;
+
+    for (uint16_t i = 0; i < num; i++)
+    {
+        if (remainingBits >= bits[i])
+        {
+            buffer[idxBuffer] = (buffer[idxBuffer] << bits[i]) |
+                                (values[i] & static_cast<uint16_t>(pow(2, bits[i]) - 1));
+            remainingBits = remainingBits - bits[i];
+        }
+        else
+        {
+            buffer[idxBuffer] = (buffer[idxBuffer] << remainingBits) |
+                                ((values[i] & static_cast<uint16_t>(pow(2, bits[i]) - 1)) >>
+                                 (bits[i] - remainingBits));
+            idxBuffer++;
+            buffer[idxBuffer] |=
+                values[i] & static_cast<uint16_t>(pow(2, bits[i] - remainingBits) - 1);
+            remainingBits = 8 - (bits[i] - remainingBits);
+        }
+
+        if (remainingBits == 0 && i < num - 1)
+        {
+            remainingBits = 8;
+            idxBuffer++;
+        }
+    }
+    if (remainingBits < 8)
+    {
+        buffer[idxBuffer] = buffer[idxBuffer] << remainingBits;
+    }
+
+    NS_ASSERT(buffer.size() == m_nc + ceil(m_ns * m_na / 2 * (m_bits1 + m_bits2) / 8.0));
+    return buffer;
+}
+
+std::vector<uint16_t>
+HeCompressedBfReport::ReadBfReportBuffer(std::vector<uint8_t> buffer,
+                                         std::vector<uint8_t> bits,
+                                         uint16_t idxBuffer) const
+{
+    uint16_t numBytes = 0;      // total number of bytes
+    uint16_t num = bits.size(); // total number of values
+    std::vector<uint16_t> values(num, 0);
+
+    for (uint16_t i = 0; i < num; i++)
+    {
+        numBytes += bits[i];
+    }
+    numBytes = ceil(numBytes / 8.0);
+
+    uint8_t remainingBits = 8;
+    for (uint16_t i = 0; i < num; i++)
+    {
+        if (remainingBits >= bits[i])
+        {
+            values[i] = (buffer[idxBuffer] &
+                         (static_cast<uint16_t>(pow(2, bits[i]) - 1) << (8 - bits[i]))) >>
+                        (8 - bits[i]);
+            buffer[idxBuffer] = buffer[idxBuffer] << bits[i];
+            remainingBits = remainingBits - bits[i];
+        }
+        else
+        {
+            uint16_t value = 0;
+            if (bits[i] == 9)
+            {
+                value |= (buffer[idxBuffer] &
+                          (static_cast<uint16_t>(pow(2, remainingBits) - 1) << (8 - remainingBits)))
+                         << (bits[i] - 8);
+            }
+            else
+            {
+                value |= (buffer[idxBuffer] & (static_cast<uint16_t>(pow(2, remainingBits) - 1)
+                                               << (8 - remainingBits))) >>
+                         (8 - remainingBits - (bits[i] - remainingBits));
+            }
+            idxBuffer += 1;
+            value |= (buffer[idxBuffer] & static_cast<uint16_t>(pow(2, bits[i] - remainingBits) - 1)
+                                              << (8 - (bits[i] - remainingBits))) >>
+                     (8 - (bits[i] - remainingBits));
+            values[i] = value;
+            buffer[idxBuffer] = buffer[idxBuffer] << (bits[i] - remainingBits);
+            remainingBits = 8 - (bits[i] - remainingBits);
+        }
+
+        if (remainingBits == 0 && i < num - 1)
+        {
+            remainingBits = 8;
+            idxBuffer++;
+        }
+    }
+    return values;
+}
+
+void
+HeCompressedBfReport::ReadChannelInfoFromBuffer(std::vector<uint8_t> buffer)
+{
+    NS_ASSERT(buffer.size() == m_nc + ceil(m_ns * m_na / 2 * (m_bits1 + m_bits2) / 8.0));
+
+    m_channelInfo.m_stStreamSnr.clear();
+    m_channelInfo.m_phi.clear();
+    m_channelInfo.m_psi.clear();
+    for (uint16_t i = 0; i < m_ns; i++)
+    {
+        m_channelInfo.m_phi.emplace_back(std::vector<uint16_t>(m_na / 2, 0));
+        m_channelInfo.m_psi.emplace_back(std::vector<uint16_t>(m_na / 2, 0));
+    }
+
+    // Read space-time stream SNR
+    for (uint8_t i = 0; i < m_nc; i++)
+    {
+        m_channelInfo.m_stStreamSnr.push_back(buffer[i]);
+    }
+
+    // Total number of the Phi and Psi angle values that needs to be read from the buffer of
+    // compressed beamforming report
+    uint16_t numValues = m_ns * m_na;
+
+    // A vector containing all the Phi and Psi angle values that needs to be write into the buffer
+    std::vector<uint16_t> values(numValues, 0);
+    std::vector<uint8_t> bits(numValues, 0);
+    uint16_t idxValues = 0;
+    uint16_t idxBuffer = m_nc;
+
+    switch (m_na)
+    {
+    case 2: {
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            bits[idxValues] = m_bits1;
+            bits[idxValues + 1] = m_bits2;
+
+            idxValues = idxValues + m_na;
+        }
+
+        values = ReadBfReportBuffer(buffer, bits, idxBuffer);
+
+        idxValues = 0;
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            m_channelInfo.m_phi[i][0] = values[idxValues];
+            m_channelInfo.m_psi[i][0] = values[idxValues + 1];
+            idxValues = idxValues + m_na;
+        }
+        break;
+    }
+    case 4:
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            bits[idxValues] = m_bits1;
+            bits[idxValues + 1] = m_bits1;
+            bits[idxValues + 2] = m_bits2;
+            bits[idxValues + 3] = m_bits2;
+
+            idxValues = idxValues + m_na;
+        }
+
+        values = ReadBfReportBuffer(buffer, bits, idxBuffer);
+
+        idxValues = 0;
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            m_channelInfo.m_phi[i][0] = values[idxValues];
+            m_channelInfo.m_phi[i][1] = values[idxValues + 1];
+            m_channelInfo.m_psi[i][0] = values[idxValues + 2];
+            m_channelInfo.m_psi[i][1] = values[idxValues + 3];
+
+            idxValues = idxValues + m_na;
+        }
+        break;
+    case 6:
+        if (m_nr == 3)
+        {
+            for (uint16_t i = 0; i < m_ns; i++)
+            {
+                bits[idxValues] = m_bits1;
+                bits[idxValues + 1] = m_bits1;
+                bits[idxValues + 2] = m_bits2;
+                bits[idxValues + 3] = m_bits2;
+                bits[idxValues + 4] = m_bits1;
+                bits[idxValues + 5] = m_bits2;
+
+                idxValues = idxValues + m_na;
+            }
+
+            values = ReadBfReportBuffer(buffer, bits, idxBuffer);
+
+            idxValues = 0;
+            for (uint16_t i = 0; i < m_ns; i++)
+            {
+                m_channelInfo.m_phi[i][0] = values[idxValues];
+                m_channelInfo.m_phi[i][1] = values[idxValues + 1];
+                m_channelInfo.m_psi[i][0] = values[idxValues + 2];
+                m_channelInfo.m_psi[i][1] = values[idxValues + 3];
+                m_channelInfo.m_phi[i][2] = values[idxValues + 4];
+                m_channelInfo.m_psi[i][2] = values[idxValues + 5];
+
+                idxValues = idxValues + m_na;
+            }
+        }
+        else if (m_nr == 4)
+        {
+            for (uint16_t i = 0; i < m_ns; i++)
+            {
+                bits[idxValues] = m_bits1;
+                bits[idxValues + 1] = m_bits1;
+                bits[idxValues + 2] = m_bits1;
+                bits[idxValues + 3] = m_bits2;
+                bits[idxValues + 4] = m_bits2;
+                bits[idxValues + 5] = m_bits2;
+
+                idxValues = idxValues + m_na;
+            }
+
+            values = ReadBfReportBuffer(buffer, bits, idxBuffer);
+
+            idxValues = 0;
+            for (uint16_t i = 0; i < m_ns; i++)
+            {
+                m_channelInfo.m_phi[i][0] = values[idxValues];
+                m_channelInfo.m_phi[i][1] = values[idxValues + 1];
+                m_channelInfo.m_phi[i][2] = values[idxValues + 2];
+                m_channelInfo.m_psi[i][0] = values[idxValues + 3];
+                m_channelInfo.m_psi[i][1] = values[idxValues + 4];
+                m_channelInfo.m_psi[i][2] = values[idxValues + 5];
+
+                idxValues = idxValues + m_na;
+            }
+        }
+        else
+        {
+            NS_FATAL_ERROR("Improper number of angles");
+        }
+        break;
+    case 10:
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            bits[idxValues] = m_bits1;
+            bits[idxValues + 1] = m_bits1;
+            bits[idxValues + 2] = m_bits1;
+            bits[idxValues + 3] = m_bits2;
+            bits[idxValues + 4] = m_bits2;
+            bits[idxValues + 5] = m_bits2;
+            bits[idxValues + 6] = m_bits1;
+            bits[idxValues + 7] = m_bits1;
+            bits[idxValues + 8] = m_bits2;
+            bits[idxValues + 9] = m_bits2;
+
+            idxValues = idxValues + m_na;
+        }
+
+        values = ReadBfReportBuffer(buffer, bits, idxBuffer);
+
+        idxValues = 0;
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            m_channelInfo.m_phi[i][0] = values[idxValues];
+            m_channelInfo.m_phi[i][1] = values[idxValues + 1];
+            m_channelInfo.m_phi[i][2] = values[idxValues + 2];
+            m_channelInfo.m_psi[i][0] = values[idxValues + 3];
+            m_channelInfo.m_psi[i][1] = values[idxValues + 4];
+            m_channelInfo.m_psi[i][2] = values[idxValues + 5];
+            m_channelInfo.m_phi[i][3] = values[idxValues + 6];
+            m_channelInfo.m_phi[i][4] = values[idxValues + 7];
+            m_channelInfo.m_psi[i][3] = values[idxValues + 8];
+            m_channelInfo.m_psi[i][4] = values[idxValues + 9];
+
+            idxValues = idxValues + m_na;
+        }
+        break;
+    case 12:
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            bits[idxValues] = m_bits1;
+            bits[idxValues + 1] = m_bits1;
+            bits[idxValues + 2] = m_bits1;
+            bits[idxValues + 3] = m_bits2;
+            bits[idxValues + 4] = m_bits2;
+            bits[idxValues + 5] = m_bits2;
+            bits[idxValues + 6] = m_bits1;
+            bits[idxValues + 7] = m_bits1;
+            bits[idxValues + 8] = m_bits2;
+            bits[idxValues + 9] = m_bits2;
+            bits[idxValues + 10] = m_bits1;
+            bits[idxValues + 11] = m_bits2;
+
+            idxValues = idxValues + m_na;
+        }
+
+        values = ReadBfReportBuffer(buffer, bits, idxBuffer);
+
+        idxValues = 0;
+        for (uint16_t i = 0; i < m_ns; i++)
+        {
+            m_channelInfo.m_phi[i][0] = values[idxValues];
+            m_channelInfo.m_phi[i][1] = values[idxValues + 1];
+            m_channelInfo.m_phi[i][2] = values[idxValues + 2];
+            m_channelInfo.m_psi[i][0] = values[idxValues + 3];
+            m_channelInfo.m_psi[i][1] = values[idxValues + 4];
+            m_channelInfo.m_psi[i][2] = values[idxValues + 5];
+            m_channelInfo.m_phi[i][3] = values[idxValues + 6];
+            m_channelInfo.m_phi[i][4] = values[idxValues + 7];
+            m_channelInfo.m_psi[i][3] = values[idxValues + 8];
+            m_channelInfo.m_psi[i][4] = values[idxValues + 9];
+            m_channelInfo.m_phi[i][5] = values[idxValues + 10];
+            m_channelInfo.m_psi[i][5] = values[idxValues + 11];
+
+            idxValues = idxValues + m_na;
+        }
+        break;
+    default:
+        NS_FATAL_ERROR("Improper number of angles");
+    }
+}
+
+uint8_t
+HeCompressedBfReport::CalculateNa(uint8_t nc, uint8_t nr)
+{
+    if ((nr == 1) && (nc == 2))
+    {
+        return 2;
+    }
+    
+    if ((nr == 2) && (nc == 1))
+    {
+        return 2;
+    }
+    else if ((nr == 2) && (nc == 2))
+    {
+        return 2;
+    }
+    else if ((nr == 3) && (nc == 1))
+    {
+        return 4;
+    }
+    else if ((nr == 3) && (nc == 2))
+    {
+        return 6;
+    }
+    else if ((nr == 3) && (nc == 3))
+    {
+        return 6;
+    }
+    else if ((nr == 4) && (nc == 1))
+    {
+        return 6;
+    }
+    else if ((nr == 4) && (nc == 2))
+    {
+        return 10;
+    }
+    else if ((nr == 4) && (nc == 3))
+    {
+        return 12;
+    }
+    else if ((nr == 4) && (nc == 4))
+    {
+        return 12;
+    }
+    else
+    {
+        NS_FATAL_ERROR("The size of beamforming report matrix is not supported.");
+        return 0;
+    }
+}
+
+uint16_t
+HeCompressedBfReport::GetNSubcarriers(uint8_t ruStart, uint8_t ruEnd, uint8_t ng)
+{
+    NS_ASSERT((ng == 4) || (ng == 16));
+    NS_ASSERT((ruEnd == 8) || (ruEnd == 17) || (ruEnd == 36) || (ruEnd == 73));
+    NS_ASSERT(ruStart == 0);
+
+    if ((ruStart == 0) & (ruEnd == 8))
+    {
+        switch (ng)
+        {
+        case 4:
+            return 64;
+        case 16:
+            return 20;
+        default:
+            return 64;
+        }
+    }
+    else if ((ruStart == 0) & (ruEnd == 17))
+    {
+        switch (ng)
+        {
+        case 4:
+            return 122;
+        case 16:
+            return 32;
+        default:
+            return 122;
+        }
+    }
+    else if ((ruStart == 0) & (ruEnd == 36))
+    {
+        switch (ng)
+        {
+        case 4:
+            return 250;
+        case 16:
+            return 64;
+        default:
+            return 250;
+        }
+    }
+    else if ((ruStart == 0) & (ruEnd == 73))
+    {
+        switch (ng)
+        {
+        case 4:
+            return 500;
+        case 16:
+            return 128;
+        default:
+            return 500;
+        }
+    }
+    else
+    {
+        NS_FATAL_ERROR("RU indexes are not supported. RU start == "
+                       << std::to_string(ruStart) << ", RU end == " << std::to_string(ruEnd));
+        return 0;
+    }
+}
+
+void
+HeCompressedBfReport::Serialize(Buffer::Iterator start) const
+{
+    NS_ASSERT(m_channelInfo.m_stStreamSnr.size() == m_nc);
+    NS_ASSERT(m_channelInfo.m_phi.size() == m_ns && m_channelInfo.m_phi.size() == m_ns);
+    NS_ASSERT(m_channelInfo.m_phi[0].size() == m_na / 2 &&
+              m_channelInfo.m_phi[0].size() == m_na / 2);
+
+    std::vector<uint16_t> values;
+    std::vector<uint8_t> bits;
+    std::tie(values, bits) = PrepareWriteBfBuffer();
+    std::vector<uint8_t> buffer = WriteBfReportBuffer(values, bits);
+
+    Buffer::Iterator i = start;
+    for (uint16_t j = 0; j < buffer.size(); j++)
+    {
+        i.WriteU8(buffer[j]);
+    }
+}
+
+uint32_t
+HeCompressedBfReport::Deserialize(Buffer::Iterator start)
+{
+    Buffer::Iterator i = start;
+
+    std::vector<uint8_t> buffer;
+    uint16_t numBytes = m_nc + ceil(((m_bits1 + m_bits2) * m_na / 2) * m_ns / 8.0);
+
+    for (uint16_t j = 0; j < numBytes; j++)
+    {
+        buffer.push_back(i.ReadU8());
+    }
+    ReadChannelInfoFromBuffer(buffer);
+
+    return i.GetDistanceFrom(start);
+}
+
+/***************************************************
+ *    HE MU Exclusive Beamforming Report field
+ ****************************************************/
+NS_OBJECT_ENSURE_REGISTERED(HeMuExclusiveBfReport);
+
+HeMuExclusiveBfReport::HeMuExclusiveBfReport()
+{
+}
+
+HeMuExclusiveBfReport::HeMuExclusiveBfReport(const HeMimoControlHeader& heMimoControlHeader)
+{
+    m_nc = heMimoControlHeader.GetNc() + 1;
+    m_ns = HeCompressedBfReport::GetNSubcarriers(heMimoControlHeader.GetRuStart(),
+                                                 heMimoControlHeader.GetRuEnd(),
+                                                 heMimoControlHeader.GetNg());
+}
+
+HeMuExclusiveBfReport::~HeMuExclusiveBfReport()
+{
+}
+
+TypeId
+HeMuExclusiveBfReport::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::HeMuExclusiveBfReport")
+                            .SetParent<Header>()
+                            .SetGroupName("Wifi")
+                            .AddConstructor<HeMuExclusiveBfReport>();
+    return tid;
+}
+
+TypeId
+HeMuExclusiveBfReport::GetInstanceTypeId() const
+{
+    return GetTypeId();
+}
+
+void
+HeMuExclusiveBfReport::Print(std::ostream& os) const
+{
+}
+
+uint32_t
+HeMuExclusiveBfReport::GetSerializedSize() const
+{
+    return ceil((4 * m_nc * m_ns) / 8.0);
+}
+
+void
+HeMuExclusiveBfReport::Serialize(Buffer::Iterator start) const
+{
+    NS_ASSERT(m_deltaSnr.size() == m_ns && m_deltaSnr[0].size() == m_nc);
+
+    Buffer::Iterator i = start;
+    uint8_t buffer = 0;
+    for (uint16_t k = 0; k < m_ns; k++)
+    {
+        for (uint8_t j = 0; j < m_nc; j++)
+        {
+            if ((k * m_nc + j) % 2)
+            {
+                buffer |= (m_deltaSnr[k][j] & 0x0f);
+                i.WriteU8(buffer);
+                buffer = 0;
+            }
+            else
+            {
+                buffer |= ((m_deltaSnr[k][j] & 0x0f) << 4);
+            }
+        }
+    }
+}
+
+uint32_t
+HeMuExclusiveBfReport::Deserialize(Buffer::Iterator start)
+{
+    Buffer::Iterator i = start;
+
+    m_deltaSnr.clear();
+
+    uint8_t buffer = 0;
+    for (uint16_t k = 0; k < m_ns; k++)
+    {
+        m_deltaSnr.emplace_back(std::vector<uint8_t>(m_nc, 0));
+        for (uint8_t j = 0; j < m_nc; j++)
+        {
+            if ((k * m_nc + j) % 2 == 0)
+            {
+                buffer = i.ReadU8();
+                m_deltaSnr[k][j] = ((buffer >> 4) & 0x0f);
+            }
+            else
+            {
+                m_deltaSnr[k][j] = (buffer & 0x0f);
+            }
+        }
+    }
+
+    return i.GetDistanceFrom(start);
+}
+
+void
+HeMuExclusiveBfReport::SetDeltaSnr(std::vector<std::vector<uint8_t>> deltaSnr)
+{
+    m_deltaSnr = deltaSnr;
+}
+
+std::vector<std::vector<uint8_t>>
+HeMuExclusiveBfReport::GetDeltaSnr()
+{
+    return m_deltaSnr;
 }
 
 } // namespace ns3

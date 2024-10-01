@@ -57,3 +57,17 @@ build_lib_example(
     ${libapplications}
     ${libinternet-apps}
 )
+
+build_lib_example(
+  NAME wifi-he-network-channel-sounding
+  SOURCE_FILES wifi-he-network-channel-sounding.cc
+  LIBRARIES_TO_LINK
+    ${libapplications}
+    ${libcore}
+    ${libinternet-apps}
+    ${libnetwork}
+    ${libwifi}
+    ${libstats}
+    ${libmobility}
+    ${libpropagation}
+)

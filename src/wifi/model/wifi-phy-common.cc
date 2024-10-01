@@ -230,6 +230,7 @@ GetModulationClassForStandard(WifiStandard standard)
         modulationClass = WIFI_MOD_CLASS_VHT;
         break;
     case WIFI_STANDARD_80211ax:
+    case WIFI_STANDARD_80211bf: // Add: modification for 802.11bf standard, use the modulation class HE
         modulationClass = WIFI_MOD_CLASS_HE;
         break;
     case WIFI_STANDARD_80211be:

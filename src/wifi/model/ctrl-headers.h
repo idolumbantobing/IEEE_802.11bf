@@ -886,6 +886,26 @@ class CtrlTriggerUserInfoField
      */
     const CtrlBAckRequestHeader& GetMuBarTriggerDepUserInfo() const;
 
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    new public function for Control Header
+    *************************************
+    */
+
+    /**
+     * Set the BFRP Trigger Dependent User Info subfield for BFRP Trigger frames.
+     *
+     * \param dependentUserInfo the BFRP Trigger Dependent User Info subfield
+     */
+    void SetBfrpTriggerDepUserInfo(uint8_t dependentUserInfo);
+    /**
+     * Get the BFRP Trigger Dependent User Info subfield
+     *
+     * \return the BFRP Trigger Dependent User Info subfield
+     */
+    uint8_t GetBfrpTriggerDepUserInfo() const;
+
   private:
     TriggerFrameVariant m_variant; //!< User Info field variant
 
@@ -916,6 +936,16 @@ class CtrlTriggerUserInfoField
                                              //!< Info subfield
     CtrlBAckRequestHeader
         m_muBarTriggerDependentUserInfo; //!< MU-BAR variant of Trigger Dependent User Info subfield
+    
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    new private attribute for Control Header
+    *************************************
+    */
+
+     uint8_t m_bfrpTriggerDependentUserInfo; //!< BFRP Trigger variant of Trigger Dependent User Info
+                                            //!< subfield
 };
 
 /**
@@ -1343,6 +1373,112 @@ class CtrlTriggerHeader : public Header
      * List of User Info fields
      */
     std::list<CtrlTriggerUserInfoField> m_userInfoFields; //!< list of User Info fields
+};
+
+/**
+ * \ingroup wifi
+ * \brief Header for Null Data Packet Announcement (NDPA) packet.
+ */
+class CtrlNdpaHeader : public Header
+{
+  public:
+    /**
+     * STA Info field
+     */
+    struct StaInfo
+    {
+        uint16_t m_aid11 : 11;        //!< AID11 subfield
+        uint8_t m_ruStart : 7;        //!< RU Start Index in Partial BW Info subfield
+        uint8_t m_ruEnd : 7;          //!< RU End Index in Partial BW Info subfield
+        uint8_t m_feedbackTypeNg : 2; //!< Feedback Type and Ng subfield
+        uint8_t m_disambiguation : 1; //!< Disambiguation subfield
+        uint8_t m_codebookSize : 1;   //!< Codebook Size subfield
+        uint8_t m_nc : 3;             //!< Nc subfield
+    };
+
+    CtrlNdpaHeader();
+    ~CtrlNdpaHeader() override;
+
+    /**
+     * \brief Get the type ID.
+     * \return the object TypeId
+     */
+    static TypeId GetTypeId();
+
+    TypeId GetInstanceTypeId() const override;
+    void Print(std::ostream& os) const override;
+    uint32_t GetSerializedSize() const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+
+    /**
+     * Append the given STA Info field to this NDPA frame
+     *
+     * \param staInfo the STA Info field to append to this NDPA frame
+     */
+    void AddStaInfoField(const StaInfo& staInfo);
+
+    /**
+     * Append a new STA Info field to this NDPA frame
+     */
+    void AddStaInfoField();
+
+    /// STA Info fields list iterator
+    typedef std::list<StaInfo>::iterator Iterator;
+
+    /**
+     * \brief Get a iterator pointing to the first STA Info field in the list.
+     *
+     * \return a iterator pointing to the first STA Info field in the list
+     */
+    Iterator begin();
+
+    /**
+     * \brief Get a iterator indicating past-the-last STA Info field in the list.
+     *
+     * \return a iterator indicating past-the-last STA Info field in the list
+     */
+    Iterator end();
+
+    /**
+     * \brief Get the number of STA Info fields in this NDPA Frame.
+     *
+     * \return the number of STA Info fields in this NDPA Frame
+     */
+    std::size_t GetNumStaInfoFields() const;
+
+    /**
+     * Get a iterator pointing to the first STA Info field found whose AID11
+     * subfield is set to the given value.
+     *
+     * \param aid11 the value of the AID11 subfield to match
+     * \return a iterator pointing to the STA Info field matching the specified
+     * criterion, if any, or an iterator indicating past-the-last STA Info field.
+     */
+    Iterator FindStaInfoWithAid(uint16_t aid11);
+
+    /**
+     * Clear the list of STA Info
+     */
+    void ClearStaInfo();
+
+    /**
+     * Set the subfield of Sounding Dialog Token
+     *
+     * \param dialogToken Sounding Dialog Token
+     */
+    void SetSoundingDialogToken(uint8_t dialogToken);
+
+    /**
+     * Get the subfield of Sounding Dialog Token
+     *
+     * \return Sounding Dialog Token
+     */
+    uint8_t GetSoundingDialogToken() const;
+
+  private:
+    uint8_t m_dialogToken;              //!< Sounding Dialog Token subfield
+    std::list<StaInfo> m_staInfoFields; //!< list of STA Info fields
 };
 
 } // namespace ns3

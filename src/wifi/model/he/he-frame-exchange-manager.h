@@ -20,6 +20,7 @@
 #ifndef HE_FRAME_EXCHANGE_MANAGER_H
 #define HE_FRAME_EXCHANGE_MANAGER_H
 
+#include "channel-sounding.h"
 #include "mu-snr-tag.h"
 
 #include "ns3/vht-frame-exchange-manager.h"
@@ -139,6 +140,47 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
      *         is idle, false otherwise
      */
     bool UlMuCsMediumIdle(const CtrlTriggerHeader& trigger) const;
+
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    Public Functions for HE Frame Exchange Manager
+    *************************************
+    */
+
+    /* Take neccessary actions to send NDPA frame, NDP frame and BFRP trigger frame (if applicable)
+     * from the beamformer.
+     */
+    void SendCsFramesFromBeamformer();
+    /**
+     * Get the pointer of channel sounding beamformer
+     * \return channel sounding beamformer pointer
+     */
+    Ptr<CsBeamformer> GetCsBeamformer() const;
+    /**
+     * Get the pointer of channel sounding beamformee
+     * \return channel sounding beamformee pointer
+     */
+    Ptr<CsBeamformee> GetCsBeamformee() const;
+    /**
+     * Get Wifi mode used to transmit beamforming reports in channel sounding
+     * \return Wifi mode used to transmit beamforming reports in channel sounding
+     */
+    std::string GetCsMode() const;
+
+    /*
+    *************************************
+    Attempt to add support for MU-MIMO functionality
+    Public Functions for HE Frame Exchange Manager
+    *************************************
+    */ 
+        
+    /**
+     * Take the necessary actions when receiving a Polling Frame.
+     *
+     */
+    void ReceivePollingFrame(const CtrlTriggerHeader& trigger, const WifiMacHeader& hdr);
+    void ResetSensingTimeout();
 
   protected:
     void DoDispose() override;
@@ -347,6 +389,25 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
     Time m_intraBssNavEnd;           //!< intra-BSS NAV expiration time
     EventId m_intraBssNavResetEvent; //!< the event to reset the intra-BSS NAV after an RTS
 
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    Protected Attributes for HE Frame Exchange Manager
+    *************************************
+    */
+
+    Ptr<CsBeamformer>
+        m_csBeamformer; //!< The channel sounding beamformer pointer (null if not a beamformer)
+    Ptr<CsBeamformee>
+        m_csBeamformee; //!< The channel sounding beamformee pointer (null if not a beamformee)
+
+    /*
+    *************************************
+    Attempt to add support for MU-MIMO functionality
+    Protected Functions for HE Frame Exchange Manager
+    *************************************
+    */
+
   private:
     /**
      * Send the current PSDU map as a DL MU PPDU.
@@ -381,6 +442,37 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
     EventId m_multiStaBaEvent;             //!< Sending a Multi-STA BlockAck event
     MuSnrTag m_muSnrTag;                   //!< Tag to attach to Multi-STA BlockAck frames
     bool m_triggerFrameInAmpdu;            //!< True if the received A-MPDU contains an MU-BAR
+
+    /*
+    *************************************
+    Attempt to add Channel Sounding from ns3.37
+    Private Functions and Attributes for HE Frame Exchange Manager
+    *************************************
+    */
+
+    /* Take the necessary actions when receiveing a BFRP Trigger Frame.
+     *
+     * \param trigger the BFRP Trigger Frame content
+     * \param hdr the MAC header of the BFRP Trigger Frame
+     */
+    void ReceiveBfrpTrigger(const CtrlTriggerHeader& trigger, const WifiMacHeader& hdr);
+    /**
+     * Take the necessary actions after that some beamforming reports are missing.
+     */
+    void BfReportTimeout(void);
+    Time m_lastCsTime;       //!< Duration of channel sounding process
+    bool m_csDurationOutput; //!< Whether to output the duration of channel sounding process
+    std::string m_csMode;    //! Wifi mode used for beamforming report feedback
+
+    /*
+    *************************************
+    Attempt to add support for MU-MIMO functionality
+    Private Functions for HE Frame Exchange Manager
+    *************************************
+    */
+    bool m_NDPA_Sounding_mutex = 0;
+    bool m_Polling_Receive_mutex = 0;
+    // Time remainingTxopForSensing = m_apMac->GetRemainingCfpDuration();
 };
 
 } // namespace ns3
