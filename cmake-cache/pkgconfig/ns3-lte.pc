@@ -1,0 +1,13 @@
+exec_prefix="/usr/local/bin"
+libdir="/usr/local/lib"
+includedir="/usr/local/include"
+
+Name: ns3-lte
+Description: 
+URL: 
+Version: 3.40
+Requires:  ns3-fd-net-device ns3-core ns3-network ns3-spectrum ns3-stats ns3-buildings ns3-virtual-net-device ns3-point-to-point ns3-applications ns3-internet ns3-csma ns3-config-store
+Requires.private: 
+Cflags: -I"${includedir}"  -I/usr/include
+Libs: -L"${libdir}" -lns3.40-lte-optimized  -lns3.40-fd-net-device-optimized -lns3.40-core-optimized -lns3.40-network-optimized -lns3.40-spectrum-optimized -lns3.40-stats-optimized -lns3.40-buildings-optimized -lns3.40-virtual-net-device-optimized -lns3.40-point-to-point-optimized -lns3.40-applications-optimized -lns3.40-internet-optimized -lns3.40-csma-optimized -lns3.40-config-store-optimized
+Libs.private: -L"${libdir}" 
