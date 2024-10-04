@@ -154,6 +154,36 @@ if [ "$option" == "nStationMU" ]; then
 fi
 
 ##                                                    ##
+####        Testing variable : frequency              ###
+##                                                    ##
+frequency_test=("2.4" "5" "6")
+if [ "$option" == "frequency" ]; then
+    counter=0
+    for nSta in "${nStations[@]}"; do
+        for freq in "${frequency_test[@]}"; do
+            for nseed in "${seed[@]}"; do
+                echo "Processing file $counter: nStations = $nSta, Seed = $nseed"
+
+                # Run each iteration in the background for parallel processing
+                (
+                    # Example of running your program with parameters
+                    ./ns3 run "examples/wireless/wifi-bf-network.cc --frequency=$freq --nStations=$nSta --seed=$nseed --simulationTime=60.0 --radius=1 --sensingRate=1000" --no-build>/home/idomanuel/Result/Result_frequency-based/"freq=$freq"/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
+
+                ) &
+                # ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed" >/home/idomanuel/Result/Result_nStations_based/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
+
+                ((counter++))
+
+                # # Limit the number of parallel processes (adjust as needed)
+                if ((counter % 4 == 0)); then
+                    wait
+                fi
+            done
+        done
+    done
+fi
+
+##                                                    ##
 ####          Testing variable : cfpMax              ###
 ##                                                    ##
 # cfpMaxDuration=("100")

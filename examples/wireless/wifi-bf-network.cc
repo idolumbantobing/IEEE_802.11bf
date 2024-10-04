@@ -1994,7 +1994,9 @@ main(int argc, char* argv[])
             }
         }
         std::cout << "# successful sensing: " << m_innerCounter << std::endl;
-        std::cout << "# unsuccessfull sensing: " << simulationTime * (1000/sensingRate) * nBfBss - m_innerCounter << std::endl;
+        int unsuccessfulSensing = simulationTime * (1000 / sensingRate) * nBfBss - m_innerCounter;
+        if (unsuccessfulSensing < 0) unsuccessfulSensing = 0;
+        std::cout << "# unsuccessfull sensing: " << unsuccessfulSensing << std::endl;
     }
     else
     {
@@ -2319,7 +2321,9 @@ main(int argc, char* argv[])
             }
         }
         std::cout << "# successful sensing: " << m_innerCounter << std::endl;
-        std::cout << "# unsuccessfull sensing: " << simulationTime * (1000/sensingRate) * nBfBss - m_innerCounter << std::endl;
+        int unsuccessfulSensing = simulationTime * (1000 / sensingRate) * nBfBss - m_innerCounter;
+        if (unsuccessfulSensing < 0) unsuccessfulSensing = 0;
+        std::cout << "# unsuccessfull sensing: " << unsuccessfulSensing << std::endl;
     }
 
     Simulator::Destroy();
