@@ -1028,7 +1028,7 @@ main(int argc, char* argv[])
     multipleBss = true;
     bool downlink{true};
     uint64_t cfpMaxDurationMs = 50;  // milliseconds
-    uint64_t sensingRate = 50;       // milliseconds
+    uint64_t sensingInterval = 50;       // milliseconds
     double simulationTime = 5.0;     // seconds
     radius = 2.0;                    // meters
     numerator = 0.0;                 // numerator for the ratio in multiple BSS scenario
@@ -1123,7 +1123,7 @@ main(int argc, char* argv[])
     cmd.AddValue("residentialDensity",
                  "Density scenario for the residential layout",
                  residentialDensity);
-    cmd.AddValue("sensingRate", "Rate for sensing procedure", sensingRate);
+    cmd.AddValue("sensingInterval", "Rate for sensing procedure", sensingInterval);
     cmd.Parse(argc, argv);
 
     RngSeedManager::SetSeed(iseed);
@@ -1273,8 +1273,8 @@ main(int argc, char* argv[])
                               BooleanValue(true),
                               "SensingPriority",
                               UintegerValue(sensingPriority),
-                              "SensingRate",
-                              TimeValue(MilliSeconds(sensingRate)));
+                              "sensingInterval",
+                              TimeValue(MilliSeconds(sensingInterval)));
 
                 macAp.SetMultiUserScheduler("ns3::RrMultiUserScheduler",
                                             "ChannelSoundingInterval",
@@ -1392,8 +1392,8 @@ main(int argc, char* argv[])
                           BooleanValue(true),
                           "SensingPriority",
                           UintegerValue(sensingPriority),
-                          "SensingRate",
-                          TimeValue(MilliSeconds(sensingRate)));
+                          "sensingInterval",
+                          TimeValue(MilliSeconds(sensingInterval)));
 
             macAp.SetMultiUserScheduler("ns3::RrMultiUserScheduler",
                                         "ChannelSoundingInterval",
@@ -1994,7 +1994,7 @@ main(int argc, char* argv[])
             }
         }
         std::cout << "# successful sensing: " << m_innerCounter << std::endl;
-        int unsuccessfulSensing = simulationTime * (1000 / sensingRate) * nBfBss - m_innerCounter;
+        int unsuccessfulSensing = simulationTime * (1000 / sensingInterval) * nBfBss - m_innerCounter;
         if (unsuccessfulSensing < 0) unsuccessfulSensing = 0;
         std::cout << "# unsuccessfull sensing: " << unsuccessfulSensing << std::endl;
     }
@@ -2321,7 +2321,7 @@ main(int argc, char* argv[])
             }
         }
         std::cout << "# successful sensing: " << m_innerCounter << std::endl;
-        int unsuccessfulSensing = simulationTime * (1000 / sensingRate) * nBfBss - m_innerCounter;
+        int unsuccessfulSensing = simulationTime * (1000 / sensingInterval) * nBfBss - m_innerCounter;
         if (unsuccessfulSensing < 0) unsuccessfulSensing = 0;
         std::cout << "# unsuccessfull sensing: " << unsuccessfulSensing << std::endl;
     }

@@ -188,11 +188,11 @@ class ApWifiMac : public InfrastructureWifiMac
     /**
      * \param rate of sensing in the simulation.
      */
-    void SetSensingRate(Time rate);
+    void SetSensingInterval(Time rate);
     /**
      * \return the maximum duration for the CF period.
      */
-    Time GetSensingRate(void) const;
+    Time GetSensingInterval(void) const;
     /**
      * Enable or disable PCF support for the device.
      *
@@ -641,7 +641,7 @@ class ApWifiMac : public InfrastructureWifiMac
                            //!< AP
     bool m_SensingAppBegin = false; //!< Flag to indicate that the sensing application has started
     bool m_waitingCSIReport = false; //!< Flag to indicate that the AP is waiting for a CSI report
-    Time m_sensingRate;              //!< Rate of sensing in the simulation
+    Time m_sensingInterval;              //!< Rate of sensing in the simulation
     /// store value and timestamp for each Buffer Status Report
     struct BsrType
     {

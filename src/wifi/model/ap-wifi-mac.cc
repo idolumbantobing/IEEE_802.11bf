@@ -46,6 +46,8 @@
 #include "ns3/simulator.h"
 #include "ns3/string.h"
 
+#include <random>
+
 namespace ns3
 {
 
@@ -123,10 +125,10 @@ ApWifiMac::GetTypeId()
                 UintegerValue(4),
                 MakeUintegerAccessor(&ApWifiMac::SetSensingPriority),
                 MakeUintegerChecker<uint16_t>())
-            .AddAttribute("SensingRate",
-                          "The rate of sensing occurance in the simulation",
+            .AddAttribute("sensingInterval",
+                          "The interval of each sensing occurance in the simulation",
                           TimeValue(MilliSeconds(1000)),
-                          MakeTimeAccessor(&ApWifiMac::SetSensingRate, &ApWifiMac::GetSensingRate),
+                          MakeTimeAccessor(&ApWifiMac::SetSensingInterval, &ApWifiMac::GetSensingInterval),
                           MakeTimeChecker());
     return tid;
 }
@@ -1523,7 +1525,7 @@ ApWifiMac::SendOneBeacon(uint8_t linkId)
                     GetTxop()->Queue(packet, hdr);
                 }
             }
-            Simulator::Schedule(GetSensingRate(), &ApWifiMac::SendOneBeacon, this, 0U);
+            Simulator::Schedule(GetSensingInterval(), &ApWifiMac::SendOneBeacon, this, 0U);
             // Simulator::Schedule(GetCfpMaxDuration()/2 - GetWifiPhy(0U)->GetPifs(),
             //                     &ApWifiMac::EndSensing,
             //                     this,
@@ -2830,7 +2832,8 @@ ApWifiMac::SensingRetransmission(uint8_t linkId)
 {
     NS_LOG_FUNCTION(this);
     NS_ASSERT(GetPcfSupported() && GetQosSupported());
-    // std::cout << "Collision occurs in transmission by : " << GetAddress() << " " << Simulator::Now()
+    // std::cout << "Collision occurs in transmission by : " << GetAddress() << " " <<
+    // Simulator::Now()
     //           << std::endl;
     if (GetRemainingCfpDuration().IsPositive())
     {
@@ -2862,7 +2865,7 @@ ApWifiMac::SensingRetransmission(uint8_t linkId)
     else
     {
         std::cout << "Maximum CFP is not enough! : " << GetAddress() << " " << Simulator::Now()
-              << std::endl;
+                  << std::endl;
         return;
     }
 }
@@ -3016,15 +3019,37 @@ ApWifiMac::GetChannelSoundingSupported() const
 }
 
 void
-ApWifiMac::SetSensingRate(Time rate)
+ApWifiMac::SetSensingInterval(Time rate)
 {
-    m_sensingRate = rate;
+    m_sensingInterval = rate;
 }
 
 Time
-ApWifiMac::GetSensingRate() const
+ApWifiMac::GetSensingInterval() const
 {
-    return m_sensingRate;
+    int menu = 1;
+    if (menu == 1)
+    {
+        // Seed the random number generator
+        std::random_device rd;                               // Obtain a random number from hardware
+        std::mt19937 gen(rd());                              // Seed the generator
+        std::poisson_distribution<int> poisson_dist(m_sensingInterval.GetMilliSeconds()); // Poisson distribution
+        return MilliSeconds(poisson_dist(gen));
+    }
+    else if (menu == 2)
+    {
+        // Seed the random number generator
+        std::random_device rd;                               // Obtain a random number from hardware
+        std::mt19937 gen(rd());                              // Seed the generator
+        std::normal_distribution<double> dist(float(m_sensingInterval.GetMilliSeconds()), float(m_sensingInterval.GetMilliSeconds())/10); // Normal distribution
+        std::cout << "Normal distribution: " << dist(gen) << std::endl;
+        double random_value = std::max(1.0, dist(gen));
+        return MilliSeconds(random_value);
+    }
+    else if (menu == 0)
+    {
+        return m_sensingInterval;
+    }
 }
 
 /*
