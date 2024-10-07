@@ -2,6 +2,8 @@
 *.orig
 *.patch
 *.rej
+*.txt
+*.png
 
 *.o
 *.pyc

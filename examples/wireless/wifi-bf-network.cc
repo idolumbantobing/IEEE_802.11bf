@@ -151,6 +151,7 @@ double numerator;
 double denominator;
 double ratio;
 bool residentialDensity;
+bool enableFrameAggregation;
 std::vector<int> indoorOfficeApOrder_vec(12, 0);
 
 // Global variables for use in callbacks.
@@ -972,7 +973,7 @@ setNumberDevice(int scenario)
                 std::snprintf(address_tempconst,
                               sizeof(address_tempconst),
                               "00:00:00:00:00:%02x",
-                              i + 1 + (i*nStations));
+                              i + 1 + (i * nStations));
                 Mac48Address address = Mac48Address(address_tempconst);
                 Calculation calc;
                 calc.m_avgTrueLatency = Seconds(0);
@@ -1027,17 +1028,19 @@ main(int argc, char* argv[])
     bool enableWiFiSensing = true;
     multipleBss = true;
     bool downlink{true};
-    uint64_t cfpMaxDurationMs = 50;  // milliseconds
-    uint64_t sensingInterval = 50;       // milliseconds
-    double simulationTime = 5.0;     // seconds
-    radius = 2.0;                    // meters
-    numerator = 0.0;                 // numerator for the ratio in multiple BSS scenario
-    denominator = nBss;              // denominator for the ratio in multiple BSS scenario
-    ratio = numerator / denominator; // ratio of number of bf to ax BSS in multiple BSS scenario
+    uint64_t cfpMaxDurationMs = 50;   // milliseconds
+    uint64_t sensingInterval = 50;    // milliseconds
+    uint64_t sensingIntervalType = 0; // 0: Constant, 1: Poisson-distributed
+    double simulationTime = 5.0;      // seconds
+    radius = 2.0;                     // meters
+    numerator = 0.0;                  // numerator for the ratio in multiple BSS scenario
+    denominator = nBss;               // denominator for the ratio in multiple BSS scenario
+    ratio = numerator / denominator;  // ratio of number of bf to ax BSS in multiple BSS scenario
     bool udp = true;
     uint16_t sensingPriority = 0; // Priority for sensing, AC_BE by default
     int scenario = 1;
     residentialDensity = 1;
+    enableFrameAggregation = true;
 
     /***********************************/
     // Parameter for Channel Sounding  //
@@ -1124,6 +1127,10 @@ main(int argc, char* argv[])
                  "Density scenario for the residential layout",
                  residentialDensity);
     cmd.AddValue("sensingInterval", "Rate for sensing procedure", sensingInterval);
+    cmd.AddValue("sensingIntervalType", "Type of sensing interval", sensingIntervalType);
+    cmd.AddValue("enableFrameAggregation",
+                 "Enable/disable frame aggregation",
+                 enableFrameAggregation);
     cmd.Parse(argc, argv);
 
     RngSeedManager::SetSeed(iseed);
@@ -1273,8 +1280,10 @@ main(int argc, char* argv[])
                               BooleanValue(true),
                               "SensingPriority",
                               UintegerValue(sensingPriority),
-                              "sensingInterval",
-                              TimeValue(MilliSeconds(sensingInterval)));
+                              "SensingInterval",
+                              TimeValue(MilliSeconds(sensingInterval)),
+                              "SensingIntervalType",
+                              UintegerValue(sensingIntervalType));
 
                 macAp.SetMultiUserScheduler("ns3::RrMultiUserScheduler",
                                             "ChannelSoundingInterval",
@@ -1339,6 +1348,7 @@ main(int argc, char* argv[])
                 //     UintegerValue(11398)); // Enable A-MSDU with the highest maximum size (in
                 //     Bytes) allowed
                 //                            // by the standard);
+
                 // macAp.SetMultiUserScheduler("ns3::RrMultiUserScheduler",
                 //                             "EnableUlOfdma",
                 //                             BooleanValue(enableUlOfdma),
@@ -1392,8 +1402,10 @@ main(int argc, char* argv[])
                           BooleanValue(true),
                           "SensingPriority",
                           UintegerValue(sensingPriority),
-                          "sensingInterval",
-                          TimeValue(MilliSeconds(sensingInterval)));
+                          "SensingInterval",
+                          TimeValue(MilliSeconds(sensingInterval)),
+                          "SensingIntervalType",
+                          UintegerValue(sensingIntervalType));
 
             macAp.SetMultiUserScheduler("ns3::RrMultiUserScheduler",
                                         "ChannelSoundingInterval",
@@ -1424,14 +1436,14 @@ main(int argc, char* argv[])
                            "CtsToSelfSupported",
                            BooleanValue(enableCTStoSelf),
                            "QosSupported",
-                           BooleanValue(true),"ManualConnection",
-                               BooleanValue(true));
+                           BooleanValue(true),
+                           "ManualConnection",
+                           BooleanValue(true));
             for (int i = 0; i < nBfBss; i++)
             {
                 allBss[i].staDevices = wifi.Install(phy, macSta, allBss[i].wifiStaNode);
             }
         }
-        // For the second BSS
 
         Time accessReqInterval{0};
         WifiMacHelper macAp_net2, macSta_net2;
@@ -1451,18 +1463,16 @@ main(int argc, char* argv[])
 
         macAp_net2.SetType("ns3::ApWifiMac", "Ssid", SsidValue(ssid));
 
-        // macAp_net2.SetType(
-        //     "ns3::ApWifiMac",
-        //     "Ssid",
-        //     SsidValue(ssid),
-        //     "BE_MaxAmpduSize",
-        //     UintegerValue(
-        //         15523200), // Enable A-MPDU with the highest maximum size allowed by the
-        //         standard
-        //     "BE_MaxAmsduSize",
-        //     UintegerValue(11398)); // Enable A-MSDU with the highest maximum size (in Bytes)
-        //     allowed
-        //                            // by the standard);
+        if (!enableFrameAggregation)
+        {
+            macAp_net2.SetType(
+                "ns3::ApWifiMac",
+                "BE_MaxAmpduSize",
+                UintegerValue(0), // Enable A-MPDU with the highest maximum size allowed by the standard
+                "BE_MaxAmsduSize",
+                UintegerValue(0)); // Enable A-MSDU with the highest maximum size (in Bytes) allowed
+        }
+
         // macAp.SetMultiUserScheduler("ns3::RrMultiUserScheduler",
         //                             "EnableUlOfdma",
         //                             BooleanValue(enableUlOfdma),
@@ -1475,21 +1485,22 @@ main(int argc, char* argv[])
             allBss[i].apDevice_net2 = wifi.Install(phy, macAp_net2, allBss[i].WifiApNode_net2);
         }
 
-        macSta_net2.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid),"ManualConnection",
-                               BooleanValue(true));
+        macSta_net2.SetType("ns3::StaWifiMac",
+                            "Ssid",
+                            SsidValue(ssid),
+                            "ManualConnection",
+                            BooleanValue(true));
 
-        // macSta_net2.SetType(
-        //     "ns3::StaWifiMac",
-        //     "Ssid",
-        //     SsidValue(ssid),
-        //     "BE_MaxAmpduSize",
-        //     UintegerValue(
-        //         15523200), // Enable A-MPDU with the highest maximum size allowed by the
-        //         standard
-        //     "BE_MaxAmsduSize",
-        //     UintegerValue(11398)); // Enable A-MSDU with the highest maximum size (in Bytes)
-        //     allowed
-        //                            // by the standard);
+        if (!enableFrameAggregation)
+        {
+            macSta_net2.SetType(
+                "ns3::StaWifiMac",
+                "BE_MaxAmpduSize",
+                UintegerValue(0), // Enable A-MPDU with the highest maximum size allowed by the standard 
+                "BE_MaxAmsduSize", 
+                UintegerValue(0)); // Enable A-MSDU with the highest maximum size (in Bytes) allowed
+        }
+
         for (int i = nBfBss; i < nBss; i++)
         {
             allBss[i].staDevices_net2 = wifi.Install(phy, macSta_net2, allBss[i].wifiStaNode_net2);
@@ -1994,8 +2005,10 @@ main(int argc, char* argv[])
             }
         }
         std::cout << "# successful sensing: " << m_innerCounter << std::endl;
-        int unsuccessfulSensing = simulationTime * (1000 / sensingInterval) * nBfBss - m_innerCounter;
-        if (unsuccessfulSensing < 0) unsuccessfulSensing = 0;
+        int unsuccessfulSensing =
+            simulationTime * (1000 / sensingInterval) * nBfBss - m_innerCounter;
+        if (unsuccessfulSensing < 0)
+            unsuccessfulSensing = 0;
         std::cout << "# unsuccessfull sensing: " << unsuccessfulSensing << std::endl;
     }
     else
@@ -2015,7 +2028,7 @@ main(int argc, char* argv[])
 
             if (udp)
             {
-                // UDP flow
+                // UDP flow for Access Point
                 UdpServerHelper server(portNumber);
                 serverApplications = server.Install(serverNodes.get());
                 serverApplications.Start(Seconds(0.0));
@@ -2025,10 +2038,11 @@ main(int argc, char* argv[])
                 {
                     UdpClientHelper client(serverInterfaces.GetAddress(index), portNumber);
                     client.SetAttribute("MaxPackets", UintegerValue(4294967295U));
-                    // client.SetAttribute("Interval",
-                    //                     TimeValue(Time("0.00001"))); // packets/s
+                    // client.SetAttribute("MaxPackets", UintegerValue(1U));
                     client.SetAttribute("Interval",
-                                        TimeValue(Time("1"))); // packets/s;
+                                        TimeValue(Time("0.00001"))); // packets/s
+                    // client.SetAttribute("Interval",
+                    //                     TimeValue(Time("1"))); // packets/s;
                     client.SetAttribute("PacketSize", UintegerValue(payloadSize));
                     clientApplications = client.Install(clientNodes.Get(index));
                     clientApplications.Start(Seconds(1.0));
@@ -2114,7 +2128,7 @@ main(int argc, char* argv[])
 
             if (udp)
             {
-                // UDP flow
+                // UDP flow for Stations
                 UdpServerHelper server(portNumber_net2);
                 serverApplications_net2 = server.Install(serverNodes.get());
                 serverApplications_net2.Start(Seconds(0.0));
@@ -2321,8 +2335,10 @@ main(int argc, char* argv[])
             }
         }
         std::cout << "# successful sensing: " << m_innerCounter << std::endl;
-        int unsuccessfulSensing = simulationTime * (1000 / sensingInterval) * nBfBss - m_innerCounter;
-        if (unsuccessfulSensing < 0) unsuccessfulSensing = 0;
+        int unsuccessfulSensing =
+            simulationTime * (1000 / sensingInterval) * nBfBss - m_innerCounter;
+        if (unsuccessfulSensing < 0)
+            unsuccessfulSensing = 0;
         std::cout << "# unsuccessfull sensing: " << unsuccessfulSensing << std::endl;
     }
 

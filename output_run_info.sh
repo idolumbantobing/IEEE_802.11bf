@@ -7,8 +7,10 @@ export IDO_LOG_FUNCTION="ApWifiMac=level_function|prefix_time:StaWifiMac=level_f
 #                                 Setting testing varibles                                     #
 ################################################################################################
 # defined test variables
+seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498" "174" "954" "320" "282" "791" "637" "450" "198" "903" "577" "764" "232" "344" "982" "615" "79" "829" "201" "941" "705" "364" "628" "110" "543" "976" "47" "489" "357" "698" "255" "921" "402" "676" "123" "861" "534" "777" "239" "997" "582"
+"367" "153" "802" "438" "294" "631" "580" "824" "139" "670" "911" "276" "48" "501" "112" "703" "980" "405" "762" "391" "17" "708" "242" "886" "56" "604" "755" "669" "318" "459" "821" "115" "497" "239" "711" "841" "692" "303" "950" "638" "553" "764" "406" "929" "871" "611" "473" "109" "921" "324") # 100 seeds
 # seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498" "174" "954" "320" "282" "791" "637" "450" "198" "903" "577" "764" "232" "344" "982" "615" "79" "829" "201" "941" "705" "364" "628" "110" "543" "976" "47" "489" "357" "698" "255" "921" "402" "676" "123" "861" "534" "777" "239" "997" "582") # 50 seed values
-seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498" "174" "954" "320" "282" "791" "637" "450" "198" "903" "577" "764" "232" "344" "79" "829") # 25 seed values
+# seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498" "174" "954" "320" "282" "791" "637" "450" "198" "903" "577" "764" "232" "344" "79" "829") # 25 seed values
 # seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498") # 10 seed values
 # seed=("347" "722" "876" "59") # 4 seed values
 # seed=("347") # 1 seed values
@@ -262,7 +264,7 @@ if [ "$option" == "multipleBssBf" ]; then
                 # Example of running your program with parameters
                 # ./ns3 run "examples/wireless/wifi-bf-network.cc --multipleBss=$boolBss --nStations=$nSta --seed=$s" >/home/idomanuel/Result/Result_multipleBSS.out/nolog_multipleBss=$boolBss,seed=$s.out 2>&1
 
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --seed=$s --simulationTime=60.0" >/home/idomanuel/Result/Result_multipleBSS/MultipleBF/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --seed=$s --simulationTime=10.0" >/home/idomanuel/Result/Result_multipleBSS/MultipleBF/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
 
             ) &
 
@@ -373,7 +375,7 @@ if [ "$option" == "multipleBssBfInterval" ]; then
 
                 # Run each iteration in the background for parallel processing
                 (
-                    ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --simulationTime=60.0 --sensingInterval=$Interval --seed=$s" --no-build >/home/idomanuel/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
+                    ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --simulationTime=$Interval --sensingInterval=$Interval --seed=$s" --no-build >/home/idomanuel/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
                 ) &
 
                 ((counter++))

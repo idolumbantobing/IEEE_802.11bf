@@ -194,6 +194,14 @@ class ApWifiMac : public InfrastructureWifiMac
      */
     Time GetSensingInterval(void) const;
     /**
+     * \param rate of sensing in the simulation.
+     */
+    void SetSensingIntervalType(u_int64_t type);
+    /**
+     * \return the maximum duration for the CF period.
+     */
+    uint64_t GetSensingIntervalType(void) const;
+    /**
      * Enable or disable PCF support for the device.
      *
      * \param enable whether PCF is supported
@@ -260,6 +268,7 @@ class ApWifiMac : public InfrastructureWifiMac
     std::pair<uint16_t, uint16_t> GetSensingPriority(void) const;
     std::pair<uint16_t, uint16_t> m_SensingCw; //!< Sensing Cw based on priority
     u_int16_t m_SensingPriority;               //!< Sensing priority
+    u_int64_t m_sensingIntervalType = 0;           //!< Sensing interval type
 
   protected:
     /**

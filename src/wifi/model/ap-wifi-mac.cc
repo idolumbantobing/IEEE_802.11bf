@@ -125,11 +125,17 @@ ApWifiMac::GetTypeId()
                 UintegerValue(4),
                 MakeUintegerAccessor(&ApWifiMac::SetSensingPriority),
                 MakeUintegerChecker<uint16_t>())
-            .AddAttribute("sensingInterval",
+            .AddAttribute("SensingInterval",
                           "The interval of each sensing occurance in the simulation",
                           TimeValue(MilliSeconds(1000)),
                           MakeTimeAccessor(&ApWifiMac::SetSensingInterval, &ApWifiMac::GetSensingInterval),
-                          MakeTimeChecker());
+                          MakeTimeChecker())
+            .AddAttribute(
+                "SensingIntervalType",
+                "This integer attribute is set to determine the type of sensing interval",
+                UintegerValue(0),
+                MakeUintegerAccessor(&ApWifiMac::SetSensingIntervalType, &ApWifiMac::GetSensingIntervalType),
+                MakeUintegerChecker<uint16_t>());
     return tid;
 }
 
@@ -3018,6 +3024,16 @@ ApWifiMac::GetChannelSoundingSupported() const
     return m_csSupported;
 }
 
+void ApWifiMac::SetSensingIntervalType(u_int64_t type)
+{
+    m_sensingIntervalType = type;
+}
+
+u_int64_t ApWifiMac::GetSensingIntervalType() const
+{
+    return m_sensingIntervalType;
+}
+
 void
 ApWifiMac::SetSensingInterval(Time rate)
 {
@@ -3027,16 +3043,17 @@ ApWifiMac::SetSensingInterval(Time rate)
 Time
 ApWifiMac::GetSensingInterval() const
 {
-    int menu = 1;
-    if (menu == 1)
+    if (GetSensingIntervalType() == 1)
     {
         // Seed the random number generator
         std::random_device rd;                               // Obtain a random number from hardware
         std::mt19937 gen(rd());                              // Seed the generator
         std::poisson_distribution<int> poisson_dist(m_sensingInterval.GetMilliSeconds()); // Poisson distribution
+        // std::cout << "Poisson distribution: " << poisson_dist(gen) << std::endl;
+        // For most representable poisson distribution, we need to set the simulation time for 1000 times of the sensing interval
         return MilliSeconds(poisson_dist(gen));
     }
-    else if (menu == 2)
+    else if (GetSensingIntervalType() == 2)
     {
         // Seed the random number generator
         std::random_device rd;                               // Obtain a random number from hardware
@@ -3046,7 +3063,7 @@ ApWifiMac::GetSensingInterval() const
         double random_value = std::max(1.0, dist(gen));
         return MilliSeconds(random_value);
     }
-    else if (menu == 0)
+    else if (GetSensingIntervalType() == 0)
     {
         return m_sensingInterval;
     }
