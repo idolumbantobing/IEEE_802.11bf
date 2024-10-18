@@ -23,9 +23,11 @@
 #include "ns3/config.h"
 #include "ns3/core-module.h"
 #include "ns3/double.h"
+#include "ns3/flow-monitor-helper.h"
 #include "ns3/he-phy.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
+#include "ns3/ipv4-flow-classifier.h"
 #include "ns3/ipv4-global-routing-helper.h"
 #include "ns3/log.h"
 #include "ns3/mac48-address.h"
@@ -137,6 +139,8 @@ Time m_sumDelay;
 Time m_avgDelay;
 Time m_sumTrueLatency;
 Time m_avgTrueLatency;
+Time m_sumTrueLatency_net2;
+Time m_avgTrueLatency_net2;
 bool enableCTStoSelf = true;
 bool firstSensingPhase = true;
 bool stillSensing = false;
@@ -180,6 +184,7 @@ typedef struct Calculation
 } Calculation;
 
 std::map<Mac48Address, Calculation> allCalculation;
+std::map<Mac48Address, Calculation> allCalculation_net2;
 
 void
 MonitorSniffRx(Ptr<const Packet> packet,
@@ -214,6 +219,20 @@ MonitorChannelAccess(Mac48Address addr, ns3::Time currentTime, bool AccessGrante
                 stillSensing = true;
             }
         }
+        else if (allCalculation_net2.find(addr) != allCalculation_net2.end())
+        {
+            // allCalculation_net2.find(addr)->second.m_sumTrueLatency = currentTime;
+            if (allCalculation_net2.find(addr)->second.stillSensing)
+            {
+                m_collisionCounter++;
+                allCalculation_net2.find(addr)->second.m_collisionCounter++;
+            }
+            else
+            {
+                allCalculation_net2.find(addr)->second.m_sumTrueLatency = currentTime;
+                allCalculation_net2.find(addr)->second.stillSensing = true;
+            }
+        }
     }
     else
     {
@@ -226,6 +245,17 @@ MonitorChannelAccess(Mac48Address addr, ns3::Time currentTime, bool AccessGrante
                     (currentTime - allCalculation.find(addr)->second.m_sumTrueLatency);
                 allCalculation.find(addr)->second.m_innerCounter++;
                 allCalculation.find(addr)->second.stillSensing = false;
+            }
+        }
+        else if (allCalculation_net2.find(addr) != allCalculation_net2.end())
+        {
+            if (allCalculation_net2.find(addr)->second.stillSensing)
+            {
+                allCalculation_net2.find(addr)->second.m_avgTrueLatency =
+                    allCalculation_net2.find(addr)->second.m_avgTrueLatency +
+                    (currentTime - allCalculation_net2.find(addr)->second.m_sumTrueLatency);
+                allCalculation_net2.find(addr)->second.m_innerCounter++;
+                allCalculation_net2.find(addr)->second.stillSensing = false;
             }
         }
     }
@@ -768,6 +798,25 @@ setNumberDevice(int scenario)
             allCalculation.insert({address, calc});
         }
 
+        int j = 0;
+        for (int i = nBfBss; i < nBss; i++)
+        {
+            char address_tempconst[18];
+            j = i + nStations * nBfBss;
+            std::snprintf(address_tempconst,
+                          sizeof(address_tempconst),
+                          "00:00:00:00:00:%02x",
+                          j + 1);
+            Mac48Address address = Mac48Address(address_tempconst);
+            Calculation calc;
+            calc.m_avgTrueLatency = Seconds(0);
+            calc.m_sumTrueLatency = Seconds(0);
+            calc.m_innerCounter = 0;
+            calc.m_collisionCounter = 0;
+            calc.stillSensing = false;
+            allCalculation_net2.insert({address, calc});
+        }
+
         for (int i = 0; i < nBfBss; i++)
         {
             NodeContainer wifiStaNode, wifiApNode;
@@ -816,6 +865,24 @@ setNumberDevice(int scenario)
             calc.stillSensing = false;
             allCalculation.insert({address, calc});
         }
+
+        for (int i = nBfBss; i < nBss; i++)
+        {
+            char address_tempconst[18];
+            std::snprintf(address_tempconst,
+                          sizeof(address_tempconst),
+                          "00:00:00:00:00:%02x",
+                          i + 1 + (i * nStations_net2));
+            Mac48Address address = Mac48Address(address_tempconst);
+            Calculation calc;
+            calc.m_avgTrueLatency = Seconds(0);
+            calc.m_sumTrueLatency = Seconds(0);
+            calc.m_innerCounter = 0;
+            calc.m_collisionCounter = 0;
+            calc.stillSensing = false;
+            allCalculation_net2.insert({address, calc});
+        }
+
         for (int i = 0; i < nBfBss; i++)
         {
             NodeContainer wifiStaNode, wifiApNode;
@@ -826,15 +893,23 @@ setNumberDevice(int scenario)
             allBss_sce2[i].wifiStaNode = wifiStaNode;
             allBss_sce2[i].wifiApNode = wifiApNode;
         }
+        int j = 0;
         for (int i = nBfBss; i < nBss; i++)
         {
-            NodeContainer wifiStaNode_net2, WifiApNode_net2;
-            wifiStaNode_net2.Create(allBss_sce2[i].nStations_no_sensing);
-            WifiApNode_net2.Create(allBss_sce2[i].nAp);
-            std::cout << i + 1 << ". BSS(ax) " << "has " << allBss_sce2[i].nStations_no_sensing
-                      << " stations " << "and " << allBss_sce2[i].nAp << " AP" << std::endl;
-            allBss_sce2[i].wifiStaNode_net2 = wifiStaNode_net2;
-            allBss_sce2[i].WifiApNode_net2 = WifiApNode_net2;
+            char address_tempconst[18];
+            j = i + nStations * nBfBss;
+            std::snprintf(address_tempconst,
+                          sizeof(address_tempconst),
+                          "00:00:00:00:00:%02x",
+                          j + 1);
+            Mac48Address address = Mac48Address(address_tempconst);
+            Calculation calc;
+            calc.m_avgTrueLatency = Seconds(0);
+            calc.m_sumTrueLatency = Seconds(0);
+            calc.m_innerCounter = 0;
+            calc.m_collisionCounter = 0;
+            calc.stillSensing = false;
+            allCalculation_net2.insert({address, calc});
         }
         return allBss_sce2;
     }
@@ -866,6 +941,26 @@ setNumberDevice(int scenario)
                 calc.stillSensing = false;
                 allCalculation.insert({address, calc});
             }
+
+            int j = 0;
+            for (int i = nBfBss; i < nBss; i++)
+            {
+                char address_tempconst[18];
+                j = i + nStations * nBfBss;
+                std::snprintf(address_tempconst,
+                              sizeof(address_tempconst),
+                              "00:00:00:00:00:%02x",
+                              j + 1);
+                Mac48Address address = Mac48Address(address_tempconst);
+                Calculation calc;
+                calc.m_avgTrueLatency = Seconds(0);
+                calc.m_sumTrueLatency = Seconds(0);
+                calc.m_innerCounter = 0;
+                calc.m_collisionCounter = 0;
+                calc.stillSensing = false;
+                allCalculation_net2.insert({address, calc});
+            }
+
             for (int i = 0; i < nBfBss; i++)
             {
                 NodeContainer wifiStaNode, wifiApNode;
@@ -916,6 +1011,26 @@ setNumberDevice(int scenario)
                 calc.stillSensing = false;
                 allCalculation.insert({address, calc});
             }
+
+            int j = 0;
+            for (int i = nBfBss; i < nBss; i++)
+            {
+                char address_tempconst[18];
+                j = i + nStations * nBfBss;
+                std::snprintf(address_tempconst,
+                              sizeof(address_tempconst),
+                              "00:00:00:00:00:%02x",
+                              j + 1);
+                Mac48Address address = Mac48Address(address_tempconst);
+                Calculation calc;
+                calc.m_avgTrueLatency = Seconds(0);
+                calc.m_sumTrueLatency = Seconds(0);
+                calc.m_innerCounter = 0;
+                calc.m_collisionCounter = 0;
+                calc.stillSensing = false;
+                allCalculation_net2.insert({address, calc});
+            }
+
             for (int i = 0; i < nBfBss; i++)
             {
                 NodeContainer wifiStaNode, wifiApNode;
@@ -1468,7 +1583,8 @@ main(int argc, char* argv[])
             macAp_net2.SetType(
                 "ns3::ApWifiMac",
                 "BE_MaxAmpduSize",
-                UintegerValue(0), // Enable A-MPDU with the highest maximum size allowed by the standard
+                UintegerValue(
+                    0), // Enable A-MPDU with the highest maximum size allowed by the standard
                 "BE_MaxAmsduSize",
                 UintegerValue(0)); // Enable A-MSDU with the highest maximum size (in Bytes) allowed
         }
@@ -1496,8 +1612,9 @@ main(int argc, char* argv[])
             macSta_net2.SetType(
                 "ns3::StaWifiMac",
                 "BE_MaxAmpduSize",
-                UintegerValue(0), // Enable A-MPDU with the highest maximum size allowed by the standard 
-                "BE_MaxAmsduSize", 
+                UintegerValue(
+                    0), // Enable A-MPDU with the highest maximum size allowed by the standard
+                "BE_MaxAmsduSize",
                 UintegerValue(0)); // Enable A-MSDU with the highest maximum size (in Bytes) allowed
         }
 
@@ -2128,7 +2245,19 @@ main(int argc, char* argv[])
 
             if (udp)
             {
-                // UDP flow for Stations
+                // UDP flow
+                // Generator for Poisson traffic
+                uint64_t interval_us = 10;
+                std::random_device rd;  // Obtain a random number from hardware
+                std::mt19937 gen(rd()); // Seed the generator
+                std::poisson_distribution<u_int64_t> poisson_dist(
+                    interval_us); // Poisson distribution
+
+                // Ptr<ExponentialRandomVariable> x = CreateObject<ExponentialRandomVariable> ();
+                // x->SetAttribute ("Mean", DoubleValue (mean));
+                // x->SetAttribute ("Bound", DoubleValue (bound));
+                // double value = x->GetValue ();
+
                 UdpServerHelper server(portNumber_net2);
                 serverApplications_net2 = server.Install(serverNodes.get());
                 serverApplications_net2.Start(Seconds(0.0));
@@ -2138,10 +2267,13 @@ main(int argc, char* argv[])
                     UdpClientHelper client(serverInterfaces.GetAddress(index), portNumber_net2);
                     client.SetAttribute("MaxPackets", UintegerValue(4294967295U));
                     // client.SetAttribute("MaxPackets", UintegerValue(1));
+                    // client.SetAttribute("Interval", TimeValue(Time("0.00001"))); // packet every
+                    // 10 us
                     client.SetAttribute("Interval",
                                         TimeValue(Time("0.00001"))); // packet every 10 us
-                    // client.SetAttribute("Interval",
-                    //                     TimeValue(Time("1")));
+                    // std::cout << "Poisson: " << poisson_dist(gen) << std::endl;
+                    // std::cout << "Poisson: " << MicroSeconds(poisson_dist(gen)) << std::endl;
+                    // client.SetAttribute("Interval", TimeValue(MicroSeconds(poisson_dist(gen))));
                     client.SetAttribute("PacketSize", UintegerValue(payloadSize));
                     clientApplications_net2 = client.Install(clientNodes.Get(index));
                     clientApplications_net2.Start(Seconds(1.0));
@@ -2165,6 +2297,8 @@ main(int argc, char* argv[])
                                        StringValue("ns3::ConstantRandomVariable[Constant=1]"));
                     onoff.SetAttribute("OffTime",
                                        StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+                    // onoff.SetAttribute("OffTime",
+                    // StringValue("ns3::ExponentialRandomVariable[Mean=1]"));
                     onoff.SetAttribute("PacketSize", UintegerValue(payloadSize));
                     onoff.SetAttribute(
                         "DataRate",
@@ -2216,7 +2350,7 @@ main(int argc, char* argv[])
         double throughput = 0;
         double throughput_net2 = 0;
         uint64_t rxBytes = 0;
-        if (multipleBss)
+        if (nAxBss > 0)
         {
             if (udp)
             {
@@ -2326,22 +2460,46 @@ main(int argc, char* argv[])
         {
             if (m_avgTrueLatency.GetSeconds() > 0.0)
             {
-                std::cout << "# average latency: " << m_avgTrueLatency.GetSeconds() / nBfBss
+                std::cout << "# average latency (bf): " << m_avgTrueLatency.GetSeconds() / nBfBss
                           << std::endl;
             }
             else
             {
-                std::cout << "# average latency: -nan " << std::endl;
+                std::cout << "# average latency (bf): -nan " << std::endl;
             }
         }
+
+        m_avgTrueLatency_net2 = Seconds(0);
+        for (auto it = allCalculation_net2.begin(); it != allCalculation_net2.end(); ++it)
+        {
+            if (it->second.m_avgTrueLatency > Seconds(0) && it->second.m_innerCounter > 0)
+            {
+                m_avgTrueLatency_net2 += it->second.m_avgTrueLatency / it->second.m_innerCounter;
+                std::cout << "# average latency (" << it->first
+                          << " ax): " << it->second.m_avgTrueLatency / it->second.m_innerCounter << std::endl;
+            }
+        }
+        if (nAxBss > 0)
+        {
+            if (m_avgTrueLatency_net2.GetSeconds() > 0.0)
+            {
+                std::cout << "# average latency (ax): "
+                          << m_avgTrueLatency_net2.GetSeconds() / nAxBss << std::endl;
+            }
+            else
+            {
+                std::cout << "# average latency (ax): -nan " << std::endl;
+            }
+        }
+
         std::cout << "# successful sensing: " << m_innerCounter << std::endl;
         int unsuccessfulSensing =
             simulationTime * (1000 / sensingInterval) * nBfBss - m_innerCounter;
         if (unsuccessfulSensing < 0)
             unsuccessfulSensing = 0;
         std::cout << "# unsuccessfull sensing: " << unsuccessfulSensing << std::endl;
-    }
 
-    Simulator::Destroy();
-    return 0;
+        Simulator::Destroy();
+        return 0;
+    }
 }

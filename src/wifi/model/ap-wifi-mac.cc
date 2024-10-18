@@ -437,11 +437,13 @@ ApWifiMac::ForwardDown(Ptr<Packet> packet, Mac48Address from, Mac48Address to, u
             }
             else
             {
+                GetWifiPhy()->NotifyMonitorChannelAccess(GetAddress(), Simulator::Now(), false);
                 GetQosTxop(tid)->Queue(packet, hdr);
             }
         }
         else
         {
+            GetWifiPhy()->NotifyMonitorChannelAccess(GetAddress(), Simulator::Now(), false);
             GetTxop()->Queue(packet, hdr);
         }
     }

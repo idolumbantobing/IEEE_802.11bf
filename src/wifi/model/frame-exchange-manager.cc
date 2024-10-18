@@ -981,6 +981,7 @@ FrameExchangeManager::TransmissionSucceeded()
     }
     else
     {
+        m_phy->NotifyMonitorChannelAccess(GetAddress(), Simulator::Now(), true);
         NotifyChannelReleased(m_dcf);
         m_dcf = nullptr;
     }

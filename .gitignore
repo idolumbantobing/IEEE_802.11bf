@@ -4,6 +4,7 @@
 *.rej
 *.txt
 *.png
+*.out
 
 *.o
 *.pyc

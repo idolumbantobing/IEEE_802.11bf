@@ -692,7 +692,6 @@ void
 HeFrameExchangeManager::TransmissionSucceeded()
 {
     NS_LOG_FUNCTION(this);
-
     // A multi-user transmission may succeed even if some stations did not respond.
     // Remove such stations from the set of stations for which protection is not needed
     // in the current TXOP.
@@ -1153,8 +1152,8 @@ HeFrameExchangeManager::SendPsduMap()
             // std::cout << m_apMac->GetCfpMaxDuration() - timeout << std::endl;
             // std::cout << timeout << std::endl;
             // m_channelAccessManager->NotifyAckTimeoutStartNow(m_apMac->GetCfpMaxDuration());
-            // m_channelAccessManager->NotifyAckTimeoutStartNow(m_apMac->GetCfpMaxDuration() - timeout); 
-            // m_channelAccessManager->NotifyAckTimeoutStartNow(timeout);
+            // m_channelAccessManager->NotifyAckTimeoutStartNow(m_apMac->GetCfpMaxDuration() -
+            // timeout); m_channelAccessManager->NotifyAckTimeoutStartNow(timeout);
         }
         else
         {
