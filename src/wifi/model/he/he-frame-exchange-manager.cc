@@ -267,19 +267,19 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
     if (txFormat == MultiUserScheduler::SU_TX)
     {
         // NS_LOG_INFO("HeFrameExchangeManager::StartFrameExchange line 235 : SU_TX");
-        if (m_apMac && mpdu_test)
-        {
-            if (mpdu_test->GetHeader().IsCts() && m_apMac->GetPcfSupported())
-            {
-                return FrameExchangeManager::StartTransmission(edca, m_phy->GetPhyBand());
-            }
-        }
+        // if (m_apMac && m_apMac->GetPcfSupported() && mpdu_test)
+        // {
+        //     if (mpdu_test->GetHeader().IsCts() && m_apMac->GetPcfSupported())
+        //     {
+        //         return FrameExchangeManager::StartTransmission(edca, m_phy->GetPhyBand());
+        //     }
+        // }
 
-        if (m_staMac && m_staMac->IsAssociated() && mpdu && mpdu->GetHeader().IsAssocReq() &&
-            mpdu->GetHeader().IsReassocReq())
-        {
-            return false;
-        }
+        // if (m_staMac && m_staMac->GetPcfSupported() && m_staMac->IsAssociated() && mpdu && mpdu->GetHeader().IsAssocReq() &&
+        //     mpdu->GetHeader().IsReassocReq())
+        // {
+        //     return false;
+        // }
 
         return VhtFrameExchangeManager::StartFrameExchange(edca, availableTime, initialFrame);
     }
@@ -2662,6 +2662,7 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
         {
             // we do not expect any other BlockAck frame
             m_txTimer.Cancel();
+            m_channelAccessManager->NotifyAckTimeoutResetNow();
 
             if (!m_multiStaBaEvent.IsRunning())
             {

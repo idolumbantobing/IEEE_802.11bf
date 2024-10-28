@@ -367,7 +367,7 @@ FrameExchangeManager::StartTransmission(Ptr<Txop> dcf, uint16_t allowedWidth)
 
     m_dcf->NotifyChannelAccessed(m_linkId);
 
-    // NS_ASSERT(mpdu->GetHeader().IsData() || mpdu->GetHeader().IsMgt());
+    NS_ASSERT(mpdu->GetHeader().IsData() || mpdu->GetHeader().IsMgt());
 
     // assign a sequence number if this is not a fragment nor a retransmission
     if (!mpdu->IsFragment() && !mpdu->GetHeader().IsRetry())
@@ -386,7 +386,6 @@ FrameExchangeManager::StartTransmission(Ptr<Txop> dcf, uint16_t allowedWidth)
     NS_ASSERT(m_protectionManager);
     NS_ASSERT(m_ackManager);
     WifiTxParameters txParams;
-
     txParams.m_txVector =
         GetWifiRemoteStationManager()->GetDataTxVector(mpdu->GetHeader(), m_allowedWidth);
     txParams.m_protection = m_protectionManager->TryAddMpdu(mpdu, txParams);
@@ -870,10 +869,10 @@ FrameExchangeManager::SendCtsToSelf(const WifiTxParameters& txParams)
     cts.SetDsNotTo();
     cts.SetNoMoreFragments();
     cts.SetNoRetry();
-    // cts.SetAddr1(m_self);
+    cts.SetAddr1(m_self);
     // attempt to implement PCF for Polling Phase
-    cts.SetAddr1(GetBssid());
-    cts.SetAddr2(GetAddress());
+    // cts.SetAddr1(GetBssid());
+    // cts.SetAddr2(GetAddress());
 
     NS_ASSERT(txParams.m_protection &&
               txParams.m_protection->method == WifiProtection::CTS_TO_SELF);
@@ -981,7 +980,8 @@ FrameExchangeManager::TransmissionSucceeded()
     }
     else
     {
-        m_phy->NotifyMonitorChannelAccess(GetAddress(), Simulator::Now(), true);
+        // m_phy->NotifyMonitorChannelAccess(m_mac->GetAddress(), Simulator::Now(), true);
+        m_mac->GetWifiPhy()->NotifyMonitorChannelAccess(m_mac->GetAddress(), Simulator::Now(), true);
         NotifyChannelReleased(m_dcf);
         m_dcf = nullptr;
     }
@@ -1047,7 +1047,10 @@ void
 FrameExchangeManager::CtsTimeout(Ptr<WifiMpdu> rts, const WifiTxVector& txVector)
 {
     NS_LOG_FUNCTION(this << *rts << txVector);
-
+    // if (m_mpdu)
+    // {
+    //     DoCtsTimeout(Create<WifiPsdu>(m_mpdu, true));
+    // }
     DoCtsTimeout(Create<WifiPsdu>(m_mpdu, true));
     m_mpdu = nullptr;
 }

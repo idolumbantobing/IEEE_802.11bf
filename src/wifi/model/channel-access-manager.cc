@@ -473,7 +473,7 @@ ChannelAccessManager::RequestAccess(Ptr<Txop> txop, bool IsCfPeriod)
      * EDCAF operations shall be performed at slot boundaries (Sec. 10.22.2.4 of 802.11-2016)
      */
     Time accessGrantStart = GetAccessGrantStart() + (txop->GetAifsn(m_linkId) * GetSlot());
-    
+
     if (txop->IsQosTxop() && txop->GetBackoffStart(m_linkId) > accessGrantStart)
     {
         // The backoff start time reported by the EDCAF is more recent than the last
@@ -483,6 +483,11 @@ ChannelAccessManager::RequestAccess(Ptr<Txop> txop, bool IsCfPeriod)
         uint32_t nIntSlots = (diff / GetSlot()).GetHigh() + 1;
         txop->UpdateBackoffSlotsNow(0, accessGrantStart + (nIntSlots * GetSlot()), m_linkId);
     }
+
+    // if (!m_pcfSupported)
+    // {
+    //     m_phy->NotifyMonitorChannelAccess(txop->m_mac->GetAddress(), Simulator::Now(), false);
+    // }
 
     UpdateBackoff();
     NS_ASSERT(txop->GetAccessStatus(m_linkId) != Txop::REQUESTED);

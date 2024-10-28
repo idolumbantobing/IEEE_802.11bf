@@ -221,7 +221,6 @@ MonitorChannelAccess(Mac48Address addr, ns3::Time currentTime, bool AccessGrante
         }
         else if (allCalculation_net2.find(addr) != allCalculation_net2.end())
         {
-            // allCalculation_net2.find(addr)->second.m_sumTrueLatency = currentTime;
             if (allCalculation_net2.find(addr)->second.stillSensing)
             {
                 m_collisionCounter++;
@@ -231,6 +230,7 @@ MonitorChannelAccess(Mac48Address addr, ns3::Time currentTime, bool AccessGrante
             {
                 allCalculation_net2.find(addr)->second.m_sumTrueLatency = currentTime;
                 allCalculation_net2.find(addr)->second.stillSensing = true;
+                // std::cout << addr << " starting communication in " << currentTime << std::endl;
             }
         }
     }
@@ -251,11 +251,10 @@ MonitorChannelAccess(Mac48Address addr, ns3::Time currentTime, bool AccessGrante
         {
             if (allCalculation_net2.find(addr)->second.stillSensing)
             {
-                allCalculation_net2.find(addr)->second.m_avgTrueLatency =
-                    allCalculation_net2.find(addr)->second.m_avgTrueLatency +
-                    (currentTime - allCalculation_net2.find(addr)->second.m_sumTrueLatency);
+                allCalculation_net2.find(addr)->second.m_avgTrueLatency += (currentTime - allCalculation_net2.find(addr)->second.m_sumTrueLatency);
                 allCalculation_net2.find(addr)->second.m_innerCounter++;
                 allCalculation_net2.find(addr)->second.stillSensing = false;
+                // std::cout << addr << " doing communication for " << currentTime - allCalculation_net2.find(addr)->second.m_sumTrueLatency << std::endl;
             }
         }
     }
@@ -653,8 +652,8 @@ setLocationScenario(int scenario,
                 for (uint32_t j = 0; j < allBss[i].nStations_sensing; j++)
                 {
                     // Randomly place STA within the area
-                    double x = getRandomCoordinate(0, areaSize);
-                    double y = getRandomCoordinate(0, areaSize);
+                    double x = getRandomCoordinate(-areaSize, areaSize);
+                    double y = getRandomCoordinate(-areaSize, areaSize);
                     std::cout << "(bf)STA: " << x << ", " << y << std::endl;
                     positionAlloc->Add(Vector(x, y, 0.0));
                 }
@@ -664,8 +663,8 @@ setLocationScenario(int scenario,
                 for (uint32_t j = 0; j < allBss[i].nStations_no_sensing; j++)
                 {
                     // Randomly place STA within the area
-                    double x = getRandomCoordinate(0, areaSize);
-                    double y = getRandomCoordinate(0, areaSize);
+                    double x = getRandomCoordinate(-areaSize, areaSize);
+                    double y = getRandomCoordinate(-areaSize, areaSize);
                     std::cout << "(ax)STA: " << x << ", " << y << std::endl;
                     positionAlloc->Add(Vector(x, y, 0.0));
                 }
@@ -800,6 +799,7 @@ setNumberDevice(int scenario)
 
         int j = 0;
         for (int i = nBfBss; i < nBss; i++)
+        // for (int i = nBfBss; i < nBfBss+1; i++)
         {
             char address_tempconst[18];
             j = i + nStations * nBfBss;
@@ -1156,6 +1156,7 @@ main(int argc, char* argv[])
     int scenario = 1;
     residentialDensity = 1;
     enableFrameAggregation = true;
+    int trafficType = 0; // 0: Constant Bit Rate, 1: Poisson Traffic
 
     /***********************************/
     // Parameter for Channel Sounding  //
@@ -1246,6 +1247,9 @@ main(int argc, char* argv[])
     cmd.AddValue("enableFrameAggregation",
                  "Enable/disable frame aggregation",
                  enableFrameAggregation);
+    cmd.AddValue("trafficType",
+                 "Traffic type of communication Wi-Fi protocol (0: Constant, 1: Poisson)",
+                 trafficType);
     cmd.Parse(argc, argv);
 
     RngSeedManager::SetSeed(iseed);
@@ -2250,8 +2254,7 @@ main(int argc, char* argv[])
                 uint64_t interval_us = 10;
                 std::random_device rd;  // Obtain a random number from hardware
                 std::mt19937 gen(rd()); // Seed the generator
-                std::poisson_distribution<u_int64_t> poisson_dist(
-                    interval_us); // Poisson distribution
+                std::poisson_distribution<u_int64_t> poisson_dist(interval_us); // Poisson distribution
 
                 // Ptr<ExponentialRandomVariable> x = CreateObject<ExponentialRandomVariable> ();
                 // x->SetAttribute ("Mean", DoubleValue (mean));
@@ -2266,14 +2269,17 @@ main(int argc, char* argv[])
                 {
                     UdpClientHelper client(serverInterfaces.GetAddress(index), portNumber_net2);
                     client.SetAttribute("MaxPackets", UintegerValue(4294967295U));
-                    // client.SetAttribute("MaxPackets", UintegerValue(1));
+                    // client.SetAttribute("MaxPackets", UintegerValue(100000U));
                     // client.SetAttribute("Interval", TimeValue(Time("0.00001"))); // packet every
                     // 10 us
-                    client.SetAttribute("Interval",
-                                        TimeValue(Time("0.00001"))); // packet every 10 us
-                    // std::cout << "Poisson: " << poisson_dist(gen) << std::endl;
-                    // std::cout << "Poisson: " << MicroSeconds(poisson_dist(gen)) << std::endl;
-                    // client.SetAttribute("Interval", TimeValue(MicroSeconds(poisson_dist(gen))));
+                    if (trafficType == 1)
+                    {
+                        client.SetAttribute("Interval", TimeValue(MicroSeconds(poisson_dist(gen))));
+                    }
+                    else
+                    {
+                        client.SetAttribute("Interval", TimeValue(Time("0.00001"))); // packet every 10 us
+                    }
                     client.SetAttribute("PacketSize", UintegerValue(payloadSize));
                     clientApplications_net2 = client.Install(clientNodes.Get(index));
                     clientApplications_net2.Start(Seconds(1.0));
@@ -2333,7 +2339,7 @@ main(int argc, char* argv[])
             if (multipleBss)
             {
                 // phy.EnablePcap("bf-wifi-network", allBss[nBfBss - 1].staDevices);
-                // phy.EnablePcap("bf-wifi-network", allBss[nBfBss].staDevices_net2);
+                phy.EnablePcap("ax-wifi-network", allBss[nBfBss].staDevices_net2);
             }
             else
             {
@@ -2441,6 +2447,7 @@ main(int argc, char* argv[])
             if (it->second.m_avgTrueLatency > Seconds(0) && it->second.m_innerCounter > 0)
             {
                 m_avgTrueLatency += it->second.m_avgTrueLatency / it->second.m_innerCounter;
+
             }
             m_innerCounter += it->second.m_innerCounter;
             m_collisionCounter += it->second.m_collisionCounter;
@@ -2474,10 +2481,10 @@ main(int argc, char* argv[])
         {
             if (it->second.m_avgTrueLatency > Seconds(0) && it->second.m_innerCounter > 0)
             {
-                m_avgTrueLatency_net2 += it->second.m_avgTrueLatency / it->second.m_innerCounter;
-                std::cout << "# average latency (" << it->first
-                          << " ax): " << it->second.m_avgTrueLatency / it->second.m_innerCounter << std::endl;
+                // m_avgTrueLatency_net2 += it->second.m_avgTrueLatency / (it->second.m_innerCounter);
+                m_avgTrueLatency_net2 += it->second.m_avgTrueLatency;
             }
+            // std::cout << it->first << " average latency: " << it->second.stillSensing << std::endl;
         }
         if (nAxBss > 0)
         {

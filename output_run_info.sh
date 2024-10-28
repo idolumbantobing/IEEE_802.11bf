@@ -271,7 +271,7 @@ if [ "$option" == "multipleBssBf" ]; then
             ((counter++))
 
             # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
+            if ((counter % 20 == 0)); then
                 wait
             fi
 
@@ -613,6 +613,40 @@ if [ "$option" == "radiusSingle" ]; then
 
             # # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
+                wait
+            fi
+        done
+    done
+fi
+
+
+##                                                    ##
+####  Testing variable : radius single BSS (1 seed)  ###
+##                                                    ##
+# seed=("2")
+# seed=("347")
+# seed=("347" "722" "876" "59" "463")
+seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498") # 10 seed values
+# nAxBss=("1" "2" "3" "4" "5" "6" "7" "8" "9" "10")
+nAxBss=("1" "2" "3" "4" "5" "6" "7" "8" "9" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "40" "41" "42" "43" "44" "45" "46" "47" "48" "49" "50" "51" "52" "53" "54" "55" "56" "57" "58" "59" "60" "61" "62" "63" "64" "65" "66" "67" "68" "69" "70" "71" "72" "73" "74" "75" "76" "77" "78" "79" "80" "81" "82" "83" "84" "85" "86" "87" "88" "89" "90" "91" "92" "93" "94" "95" "96" "97" "98" "99" "100")
+if [ "$option" == "checkAxLatency" ]; then
+    counter=0
+    for nBss in "${nAxBss[@]}"; do
+        for nseed in "${seed[@]}"; do
+            echo "Processing file $counter: nAxBss = $nBss, Seed = $nseed"
+
+            # Run each iteration in the background for parallel processing
+            (
+                # Example of running your program with parameters
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=4 --enableFrameAggregation=1=0 --seed=$nseed --nBss=$nBss --nAxBss=$nBss --simulationTime=10.0" > /home/manuel/HiWi/Result/Result_AxLatency/"nAxBss=$nBss"/nolog_nAxBss=$nBss,seed=$nseed.out 2>&1
+
+            ) &
+            # ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed" >/home/manuel/HiWi/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
+
+            ((counter++))
+
+            # # Limit the number of parallel processes (adjust as needed)
+            if ((counter % 20 == 0)); then
                 wait
             fi
         done
