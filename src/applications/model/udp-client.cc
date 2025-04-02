@@ -21,6 +21,8 @@
 
 #include "seq-ts-header.h"
 
+#include "ns3/boolean.h"
+#include "ns3/double.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/inet6-socket-address.h"
 #include "ns3/ipv4-address.h"
@@ -31,7 +33,7 @@
 #include "ns3/socket-factory.h"
 #include "ns3/socket.h"
 #include "ns3/uinteger.h"
-
+#include "ns3/random-variable-stream.h"
 #include <cstdio>
 #include <cstdlib>
 
@@ -61,6 +63,16 @@ UdpClient::GetTypeId()
                           TimeValue(Seconds(1.0)),
                           MakeTimeAccessor(&UdpClient::m_interval),
                           MakeTimeChecker())
+            .AddAttribute("EnablePoisson",
+                          "If set to true, application send packet using Poisson distribution",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&UdpClient::m_isPoisson),
+                          MakeBooleanChecker())
+            .AddAttribute("PoissonLambda",
+                          "The arrival rate between packets packets",
+                          DoubleValue(1000),
+                          MakeDoubleAccessor(&UdpClient::m_lambda),
+                          MakeDoubleChecker<double>())
             .AddAttribute("RemoteAddress",
                           "The destination Address of the outbound packets",
                           AddressValue(),
@@ -242,6 +254,13 @@ UdpClient::Send()
         NS_LOG_INFO("Error while sending " << m_size << " bytes to " << m_peerAddressString);
     }
 #endif // NS3_LOG_ENABLE
+
+    if (m_isPoisson)
+    {
+        Ptr<ExponentialRandomVariable> x = CreateObject<ExponentialRandomVariable>();
+        x->SetAttribute("Mean", DoubleValue(1 / m_lambda));
+        m_interval = Seconds(x->GetValue());
+    }
 
     if (m_sent < m_count || m_count == 0)
     {

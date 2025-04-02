@@ -217,7 +217,6 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
                                                       m_allowedWidth,
                                                       m_linkId);
     }
-    // else if (m_muScheduler && mpdu_test && !mpdu_test->GetHeader().IsCfEnd())
     else if (m_muScheduler && mpdu_test && (mpdu_test->GetHeader().IsCfPoll()))
     {
         if (m_apMac)
@@ -229,11 +228,6 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
                                                               initialFrame,
                                                               m_allowedWidth,
                                                               m_linkId);
-                // txFormat = m_muScheduler->NotifyAccessGranted(edca,
-                //                                               m_apMac->GetRemainingCfpDuration(),
-                //                                               initialFrame,
-                //                                               m_allowedWidth,
-                //                                               m_linkId);
             }
         }
         else if (m_staMac)
@@ -245,42 +239,12 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
                                                               initialFrame,
                                                               m_allowedWidth,
                                                               m_linkId);
-                // txFormat = m_muScheduler->NotifyAccessGranted(edca,
-                //                                               m_staMac->GetRemainingCfpDuration(),
-                //                                               initialFrame,
-                //                                               m_allowedWidth,
-                //                                               m_linkId);
             }
         }
-        // Ptr<WifiMpdu> mpdu_test = edca->GetWifiMacQueue()->Peek(m_linkId);
-        // std::cout << "mpdu_test->GetHeader(): " << mpdu_test->GetHeader() << "\n";
-        // if (!mpdu_test->GetHeader().IsCfEnd())
-        // {
-        //     txFormat = m_muScheduler->NotifyAccessGranted(edca,
-        //                                                   availableTime,
-        //                                                   initialFrame,
-        //                                                   m_allowedWidth,
-        //                                                   m_linkId);
-        // }
     }
 
     if (txFormat == MultiUserScheduler::SU_TX)
     {
-        // NS_LOG_INFO("HeFrameExchangeManager::StartFrameExchange line 235 : SU_TX");
-        // if (m_apMac && m_apMac->GetPcfSupported() && mpdu_test)
-        // {
-        //     if (mpdu_test->GetHeader().IsCts() && m_apMac->GetPcfSupported())
-        //     {
-        //         return FrameExchangeManager::StartTransmission(edca, m_phy->GetPhyBand());
-        //     }
-        // }
-
-        // if (m_staMac && m_staMac->GetPcfSupported() && m_staMac->IsAssociated() && mpdu && mpdu->GetHeader().IsAssocReq() &&
-        //     mpdu->GetHeader().IsReassocReq())
-        // {
-        //     return false;
-        // }
-
         return VhtFrameExchangeManager::StartFrameExchange(edca, availableTime, initialFrame);
     }
 

@@ -251,10 +251,12 @@ MonitorChannelAccess(Mac48Address addr, ns3::Time currentTime, bool AccessGrante
         {
             if (allCalculation_net2.find(addr)->second.stillSensing)
             {
-                allCalculation_net2.find(addr)->second.m_avgTrueLatency += (currentTime - allCalculation_net2.find(addr)->second.m_sumTrueLatency);
+                allCalculation_net2.find(addr)->second.m_avgTrueLatency +=
+                    (currentTime - allCalculation_net2.find(addr)->second.m_sumTrueLatency);
                 allCalculation_net2.find(addr)->second.m_innerCounter++;
                 allCalculation_net2.find(addr)->second.stillSensing = false;
-                // std::cout << addr << " doing communication for " << currentTime - allCalculation_net2.find(addr)->second.m_sumTrueLatency << std::endl;
+                // std::cout << addr << " doing communication for " << currentTime -
+                // allCalculation_net2.find(addr)->second.m_sumTrueLatency << std::endl;
             }
         }
     }
@@ -1953,11 +1955,19 @@ main(int argc, char* argv[])
                     {
                         UdpClientHelper client(serverInterfaces.GetAddress(index), portNumber_net2);
                         client.SetAttribute("MaxPackets", UintegerValue(4294967295U));
-                        // client.SetAttribute("MaxPackets", UintegerValue(1));
-                        client.SetAttribute("Interval",
-                                            TimeValue(Time("0.00001"))); // packet every 10 us
-                        // client.SetAttribute("Interval",
-                        //                     TimeValue(Time("1")));
+                        std::string interval = "0.00001"; // packet every 10 us
+                        if (trafficType == 1)
+                        {
+                            client.SetAttribute("EnablePoisson", BooleanValue(trafficType));
+                            client.SetAttribute(
+                                "PoissonLambda",
+                                DoubleValue(1 / (atof(interval.c_str())))); // packet per second
+                        }
+                        else
+                        {
+                            client.SetAttribute("Interval",
+                                                TimeValue(Time(interval))); // packet every 10 us
+                        }
                         client.SetAttribute("PacketSize", UintegerValue(payloadSize));
                         clientApplications_net2 = client.Install(clientNodes.Get(index));
                         clientApplications_net2.Start(Seconds(1.0));
@@ -1976,6 +1986,7 @@ main(int argc, char* argv[])
 
                     for (uint32_t index = 0; index < allBss[i].wifiStaNode_net2.GetN(); ++index)
                     {
+                        //For TCP poisson traffic is not yet used here
                         OnOffHelper onoff("ns3::TcpSocketFactory", Ipv4Address::GetAny());
                         onoff.SetAttribute("OnTime",
                                            StringValue("ns3::ConstantRandomVariable[Constant=1]"));
@@ -2250,17 +2261,6 @@ main(int argc, char* argv[])
             if (udp)
             {
                 // UDP flow
-                // Generator for Poisson traffic
-                uint64_t interval_us = 10;
-                std::random_device rd;  // Obtain a random number from hardware
-                std::mt19937 gen(rd()); // Seed the generator
-                std::poisson_distribution<u_int64_t> poisson_dist(interval_us); // Poisson distribution
-
-                // Ptr<ExponentialRandomVariable> x = CreateObject<ExponentialRandomVariable> ();
-                // x->SetAttribute ("Mean", DoubleValue (mean));
-                // x->SetAttribute ("Bound", DoubleValue (bound));
-                // double value = x->GetValue ();
-
                 UdpServerHelper server(portNumber_net2);
                 serverApplications_net2 = server.Install(serverNodes.get());
                 serverApplications_net2.Start(Seconds(0.0));
@@ -2269,16 +2269,18 @@ main(int argc, char* argv[])
                 {
                     UdpClientHelper client(serverInterfaces.GetAddress(index), portNumber_net2);
                     client.SetAttribute("MaxPackets", UintegerValue(4294967295U));
-                    // client.SetAttribute("MaxPackets", UintegerValue(100000U));
-                    // client.SetAttribute("Interval", TimeValue(Time("0.00001"))); // packet every
-                    // 10 us
+                    std::string interval = "0.00001"; // packet every 10 us
                     if (trafficType == 1)
                     {
-                        client.SetAttribute("Interval", TimeValue(MicroSeconds(poisson_dist(gen))));
+                        client.SetAttribute("EnablePoisson", BooleanValue(trafficType));
+                        client.SetAttribute(
+                            "PoissonLambda",
+                            DoubleValue(1 / (atof(interval.c_str())))); // packet per second
                     }
                     else
                     {
-                        client.SetAttribute("Interval", TimeValue(Time("0.00001"))); // packet every 10 us
+                        client.SetAttribute("Interval",
+                                            TimeValue(Time(interval))); // packet every 10 us
                     }
                     client.SetAttribute("PacketSize", UintegerValue(payloadSize));
                     clientApplications_net2 = client.Install(clientNodes.Get(index));
@@ -2298,13 +2300,12 @@ main(int argc, char* argv[])
 
                 for (uint32_t index = 0; index < allBss[i].wifiStaNode_net2.GetN(); ++index)
                 {
+                    // For TCP poisson traffic is not yet used here
                     OnOffHelper onoff("ns3::TcpSocketFactory", Ipv4Address::GetAny());
                     onoff.SetAttribute("OnTime",
                                        StringValue("ns3::ConstantRandomVariable[Constant=1]"));
                     onoff.SetAttribute("OffTime",
                                        StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-                    // onoff.SetAttribute("OffTime",
-                    // StringValue("ns3::ExponentialRandomVariable[Mean=1]"));
                     onoff.SetAttribute("PacketSize", UintegerValue(payloadSize));
                     onoff.SetAttribute(
                         "DataRate",
@@ -2447,7 +2448,6 @@ main(int argc, char* argv[])
             if (it->second.m_avgTrueLatency > Seconds(0) && it->second.m_innerCounter > 0)
             {
                 m_avgTrueLatency += it->second.m_avgTrueLatency / it->second.m_innerCounter;
-
             }
             m_innerCounter += it->second.m_innerCounter;
             m_collisionCounter += it->second.m_collisionCounter;
@@ -2481,10 +2481,12 @@ main(int argc, char* argv[])
         {
             if (it->second.m_avgTrueLatency > Seconds(0) && it->second.m_innerCounter > 0)
             {
-                // m_avgTrueLatency_net2 += it->second.m_avgTrueLatency / (it->second.m_innerCounter);
+                // m_avgTrueLatency_net2 += it->second.m_avgTrueLatency /
+                // (it->second.m_innerCounter);
                 m_avgTrueLatency_net2 += it->second.m_avgTrueLatency;
             }
-            // std::cout << it->first << " average latency: " << it->second.stillSensing << std::endl;
+            // std::cout << it->first << " average latency: " << it->second.stillSensing <<
+            // std::endl;
         }
         if (nAxBss > 0)
         {
