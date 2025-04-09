@@ -30,6 +30,9 @@ residntialDensity=("0" "1")
 Bandwidth=("20" "40" "80" "160")
 size=${#seed[@]}
 
+# Change / Fill this variable for the save location in local ! 
+export Save_loc="/home/manuel/HiWi"
+
 ################################################################################################
 #                          Run the program with different variable                             #
 ################################################################################################
@@ -100,11 +103,6 @@ if [ "$option" == "debug" ]; then
     ./ns3 run --gdb "examples/wireless/wifi-bf-network.cc $argument"
 fi
 
-# Main loop
-# ( NS_LOG=$IDO_LOG_INFO ./ns3 run "examples/wireless/wifi-bf-network.cc --frequency=5 --nStations=4 --seed=18 --mcs=6 --multipleBss=False" > log_singleBSS.out 2>&1 ) &
-# NS_LOG=$IDO_LOG_INFO ./ns3 run "examples/wireless/wifi-bf-network.cc --frequency=5 --nStations=4 --seed=18 --mcs=6 --multipleBss=True" > log_multipleBSS.out 2>&1
-# wait
-
 ##                                                    ##
 ####        Testing variable : nStation              ###
 ##                                                    ##
@@ -116,15 +114,11 @@ if [ "$option" == "nStation" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed --simulationTime=60.0 --radius=1 --sensingInterval=1000" --no-build>/home/manuel/HiWi/Result/Result_nStations_based_SU/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed --simulationTime=60.0 --radius=1 --sensingInterval=1000" --no-build> $Save_loc/Result/Result_nStations_based_SU/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
             ) &
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed" >/home/manuel/HiWi/Result/Result_nStations_based/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
                 wait
             fi
@@ -143,15 +137,11 @@ if [ "$option" == "nStationMU" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed --soundingtype=2 --simulationTime=60.0 --radius=2 --sensingInterval=1000" --no-build > /home/manuel/HiWi/Result/Result_nStations_based_MU/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed --soundingtype=2 --simulationTime=60.0 --radius=2 --sensingInterval=1000" --no-build > /$Save_loc/Result/Result_nStations_based_MU/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
             ) &
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed" >/home/manuel/HiWi/Result/Result_nStations_based/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
                 wait
             fi
@@ -172,12 +162,8 @@ if [ "$option" == "frequency" ]; then
 
                 # Run each iteration in the background for parallel processing
                 (
-                    # Example of running your program with parameters
-                    ./ns3 run "examples/wireless/wifi-bf-network.cc --frequency=$freq --nStations=$nSta --seed=$nseed --simulationTime=60.0 --radius=1 --sensingInterval=1000" --no-build>/home/manuel/HiWi/Result/Result_frequency-based/"freq=$freq"/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-
+                   ./ns3 run "examples/wireless/wifi-bf-network.cc --frequency=$freq --nStations=$nSta --seed=$nseed --simulationTime=60.0 --radius=1 --sensingInterval=1000" --no-build>/$Save_loc/Result/Result_frequency-based/"freq=$freq"/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
                 ) &
-                # ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed" >/home/manuel/HiWi/Result/Result_nStations_based/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-
                 ((counter++))
 
                 # # Limit the number of parallel processes (adjust as needed)
@@ -192,7 +178,6 @@ fi
 ##                                                    ##
 ####          Testing variable : cfpMax              ###
 ##                                                    ##
-# cfpMaxDuration=("100")
 if [ "$option" == "cfpMax" ]; then
     counter=0
     for s in "${seed[@]}"; do
@@ -201,8 +186,7 @@ if [ "$option" == "cfpMax" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --cfpMaxDuration=$cfp --seed=$s" >/home/manuel/HiWi/Result/Result_maxcfp-based/maxCFP=$cfp/nolog_maxCFP=$cfp,seed=$s.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --cfpMaxDuration=$cfp --seed=$s" >/$Save_loc/Result/Result_maxcfp-based/maxCFP=$cfp/nolog_maxCFP=$cfp,seed=$s.out 2>&1
             ) &
 
             ((counter++))
@@ -213,7 +197,6 @@ if [ "$option" == "cfpMax" ]; then
             fi
         done
     done
-    # Wait for any remaining background processes to finish
     wait
 fi
 
@@ -223,19 +206,13 @@ fi
 if [ "$option" == "multipleBssAx" ]; then
     counter=0
     for BssNum in "${nBss[@]}"; do
-        # ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --radius=$rad --seed=999 --enablePcap=true" >/home/manuel/HiWi/Result/Result_multipleBSS/"nBss=$BssNum"/"radius=$rad"/nologPcap_multipleBss=$BssNum,radius=$rad.out 2>&1
         for s in "${seed[@]}"; do
-            # Total process : 25 * 6 * 5 = 350
             nAxBss=$((BssNum - 1))
             echo "Processing file $counter: nBss = $BssNum, Seed = $s"
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                # ./ns3 run "examples/wireless/wifi-bf-network.cc --multipleBss=$boolBss --nStations=$nSta --seed=$s" >/home/manuel/HiWi/Result/Result_multipleBSS.out/nolog_multipleBss=$boolBss,seed=$s.out 2>&1
-
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=$nAxBss --seed=$s --sensingInterval=1000 --simulationTime=10.0" > /home/manuel/HiWi/Result/Result_multipleBSS/MultipleAX/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.txt 2>&1
-
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=$nAxBss --seed=$s --sensingInterval=1000 --simulationTime=10.0" > /$Save_loc/Result/Result_multipleBSS/MultipleAX/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.txt 2>&1
             ) &
 
             ((counter++))
@@ -244,28 +221,19 @@ if [ "$option" == "multipleBssAx" ]; then
             if ((counter % 20 == 0)); then
                 wait
             fi
-
         done
     done
 fi
 
-# nBss=("4")
 if [ "$option" == "multipleBssBf" ]; then
     counter=0
     for BssNum in "${nBss[@]}"; do
 
-        # ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --radius=$rad --seed=999 --enablePcap=true" >/home/manuel/HiWi/Result/Result_multipleBSS/"nBss=$BssNum"/"radius=$rad"/nologPcap_multipleBss=$BssNum,radius=$rad.out 2>&1
         for s in "${seed[@]}"; do
-            # Total process : 25 * 6 * 5 = 350
             echo "Processing file $counter: nBss = $BssNum, Seed = $s"
-
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                # ./ns3 run "examples/wireless/wifi-bf-network.cc --multipleBss=$boolBss --nStations=$nSta --seed=$s" >/home/manuel/HiWi/Result/Result_multipleBSS.out/nolog_multipleBss=$boolBss,seed=$s.out 2>&1
-
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --seed=$s --simulationTime=10.0" >/home/manuel/HiWi/Result/Result_multipleBSS/MultipleBF/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
-
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --seed=$s --simulationTime=10.0" >/$Save_loc/Result/Result_multipleBSS/MultipleBF/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
             ) &
 
             ((counter++))
@@ -284,15 +252,11 @@ nBss=("2" "3" "4" "5" "6")
 if [ "$option" == "multipleBssResidential" ]; then
     counter=0
     for dense in "${residntialDensity[@]}"; do
-        # ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --radius=$rad --seed=999 --enablePcap=true" >/home/manuel/HiWi/Result/Result_multipleBSS/"nBss=$BssNum"/"radius=$rad"/nologPcap_multipleBss=$BssNum,radius=$rad.out 2>&1
         for s in "${seed[@]}"; do
-            # Total process : 25 * 6 * 5 = 350
             echo "Processing file $counter: dense = $dense, Seed = $s"
-
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameterss
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --residentialDensity=$dense --scenario=3 --seed=$s --simulationTime=10.0" >/home/manuel/HiWi/Result/Result_multipleBSS/Residential/"dense=$dense"/Result/nolog_dense=$dense,seed=$s.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --residentialDensity=$dense --scenario=3 --seed=$s --simulationTime=10.0" >/$Save_loc/Result/Result_multipleBSS/Residential/"dense=$dense"/Result/nolog_dense=$dense,seed=$s.out 2>&1
 
             ) &
 
@@ -306,20 +270,17 @@ if [ "$option" == "multipleBssResidential" ]; then
     done
 fi
 
-# nStationsMultiBss=("2")
 if [ "$option" == "multipleBssBfmulSta" ]; then
     counter=0
     for nSta in "${nStationsMultiBss[@]}"; do
         for BssNum in "${nBssMulSta[@]}"; do
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --radius=$rad --seed=999 --enablePcap=true" >/home/manuel/HiWi/Result/Result_multipleBSS/"nBss=$BssNum"/"radius=$rad"/nologPcap_multipleBss=$BssNum,radius=$rad.out 2>&1
             for s in "${seed[@]}"; do
                 echo "Processing file $counter: nSta=$nSta, nBss = $BssNum, Seed = $s"
 
                 # Run each iteration in the background for parallel processing
                 (
-                    # ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --nStations=$nSta --seed=$s --simulationTime=60.0" >/home/manuel/HiWi/Result/Result_multipleBSS/MultipleBFmultiSta/"sta=$nSta"/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
                     forRatio=$((2 * BssNum))
-                    ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$forRatio --nAxBss=$BssNum --nStations=$nSta --seed=$s " >/home/manuel/HiWi/Result/Result_multipleBSS/MultipleRatioMultipleSta/"sta=$nSta"/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
+                    ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$forRatio --nAxBss=$BssNum --nStations=$nSta --seed=$s " >/$Save_loc/Result/Result_multipleBSS/MultipleRatioMultipleSta/"sta=$nSta"/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
                 ) &
 
                 ((counter++))
@@ -338,18 +299,13 @@ if [ "$option" == "multipleBssRatio" ]; then
     BssNum=("12")
     counter=0
     for numer in "${numerator[@]}"; do
-        # ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --radius=$rad --seed=999 --enablePcap=true" >/home/manuel/HiWi/Result/Result_multipleBSS/"nBss=$BssNum"/"radius=$rad"/nologPcap_multipleBss=$BssNum,radius=$rad.out 2>&1
         for s in "${seed[@]}"; do
-            # Total process : 25 * 6 * 5 = 350
             nAxBss=$((BssNum - 1))
             echo "Processing file $counter: nBss = $BssNum, Seed = $s"
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                # ./ns3 run "examples/wireless/wifi-bf-network.cc --multipleBss=$boolBss --nStations=$nSta --seed=$s" >/home/manuel/HiWi/Result/Result_multipleBSS.out/nolog_multipleBss=$boolBss,seed=$s.out 2>&1
-
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --numerator=$numer --seed=$s" >/home/manuel/HiWi/Result/Result_multipleBSS/Ratio/"ratio=$numer""to12"/nolog_multipleBss=seed=$s.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --numerator=$numer --seed=$s" >/$Save_loc/Result/Result_multipleBSS/Ratio/"ratio=$numer""to12"/nolog_multipleBss=seed=$s.out 2>&1
 
             ) &
 
@@ -369,13 +325,12 @@ if [ "$option" == "multipleBssBfInterval" ]; then
     counter=0
     for Interval in "${sensingInterval[@]}"; do
         for BssNum in "${nBssMulSta[@]}"; do
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --radius=$rad --seed=999 --enablePcap=true" >/home/manuel/HiWi/Result/Result_multipleBSS/"nBss=$BssNum"/"radius=$rad"/nologPcap_multipleBss=$BssNum,radius=$rad.out 2>&1
             for s in "${seed[@]}"; do
                 echo "Processing file $counter: Interval=$Interval, nBss = $BssNum, Seed = $s"
 
                 # Run each iteration in the background for parallel processing
                 (
-                    ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --simulationTime=$Interval --sensingInterval=$Interval --seed=$s" --no-build >/home/manuel/HiWi/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
+                    ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --simulationTime=$Interval --sensingInterval=$Interval --seed=$s" --no-build >/$Save_loc/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
                 ) &
 
                 ((counter++))
@@ -394,13 +349,12 @@ sensingInterval=("10" "20" "30" "40" "50" "100" "500" "1000")
 if [ "$option" == "multipleBssBfIntervalOffice" ]; then
     counter=0
     for Interval in "${sensingInterval[@]}"; do
-        # ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --radius=$rad --seed=999 --enablePcap=true" >/home/manuel/HiWi/Result/Result_multipleBSS/"nBss=$BssNum"/"radius=$rad"/nologPcap_multipleBss=$BssNum,radius=$rad.out 2>&1
         for s in "${seed[@]}"; do
             echo "Processing file $counter: Interval=$Interval, Seed = $s"
 
             # Run each iteration in the background for parallel processing
             (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=5 --nBfBss=6 --simulationTime=60.0 --sensingInterval=$Interval --seed=$s" --no-build >/home/manuel/HiWi/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"//nolog_multipleBss_seed=$s.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=5 --nBfBss=6 --simulationTime=60.0 --sensingInterval=$Interval --seed=$s" --no-build >/$Save_loc/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"//nolog_multipleBss_seed=$s.out 2>&1
             ) &
 
             ((counter++))
@@ -414,11 +368,6 @@ if [ "$option" == "multipleBssBfIntervalOffice" ]; then
     done
 fi
 
-# Main loop for testing different max cfp duration
-# (NS_LOG=$IDO_LOG_INFO ./ns3 run "examples/wireless/wifi-bf-network.cc --frequency=5 --nStations=4 --seed=18 --mcs=6 --cfpMaxDuration=1" >/home/manuel/HiWi/Result/Result_maxcfp-based/log_cfpmax=1ms.out 2>&1) &
-# NS_LOG=$IDO_LOG_INFO ./ns3 run "examples/wireless/wifi-bf-network.cc --frequency=5 --nStations=4 --seed=18 --mcs=6 --cfpMaxDuration=10" >/home/manuel/HiWi/Result/Result_maxcfp-based/log_cfpmax=10ms.out 2>&1
-# wait
-
 ##                                                    ##
 ####             Testing variable : mcs              ###
 ##                                                    ##
@@ -429,16 +378,13 @@ if [ "$option" == "mcs" ]; then
             echo "Processing file $counter: mcs = $nMcs, Seed = $nseed"
 
             # Run each iteration in the background for parallel processing
-            # (
-            #     # Example of running your program with parameters
-            #     ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed" >/home/manuel/HiWi/Result/Result_nStations_based/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-
-            # ) &
-            ./ns3 run "examples/wireless/wifi-bf-network.cc --mcs=$nMcs --seed=$nseed" >/home/manuel/HiWi/Result/Result_mcs-based/"mcs=$nMcs"/nolog_nMcs=$nMcs,seed=$nseed.out 2>&1
-
+            (
+               ./ns3 run "examples/wireless/wifi-bf-network.cc --mcs=$nMcs --seed=$nseed" >/$Save_loc/Result/Result_mcs-based/"mcs=$nMcs"/nolog_nMcs=$nMcs,seed=$nseed.out 2>&1
+            ) &
+            
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
                 wait
             fi
@@ -457,15 +403,13 @@ if [ "$option" == "radius" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=4 --radius=$rad --seed=$nseed --simulationTime=1.0" >/home/manuel/HiWi/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=4 --radius=$rad --seed=$nseed --simulationTime=1.0" >/$Save_loc/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
 
             ) &
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed" >/home/manuel/HiWi/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
-
+            
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
                 wait
             fi
@@ -484,15 +428,13 @@ if [ "$option" == "idealSensPrioScenario" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --sensingPriority=$prio --seed=$nseed --nBss=2 --nAxBss=1 --simulationTime=60.0" >/home/manuel/HiWi/Result/Result_sensPrio/Result_sensPrio_Ideal/"prio=$prio"/nolog_priority=seed=$nseed.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --sensingPriority=$prio --seed=$nseed --nBss=2 --nAxBss=1 --simulationTime=60.0" >/$Save_loc/Result/Result_sensPrio/Result_sensPrio_Ideal/"prio=$prio"/nolog_priority=seed=$nseed.out 2>&1
 
             ) &
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed" >/home/manuel/HiWi/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
-
+            
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
                 wait
             fi
@@ -500,12 +442,6 @@ if [ "$option" == "idealSensPrioScenario" ]; then
     done
 fi
 
-seed=("182" "736" "491" "248" "674" "902" "158" "395" "821" "507" "349" "642" "277" "815" "469" "394" "921" "560" "318" "753" "283" "634" "172" "507" "189")
-simpleSensingIntervals=()
-for ((i=10; i<=100; i+=10)); do
-  simpleSensingIntervals+=("$i")
-done
-simpleSensingIntervals=("90")
 ##                                                    ##
 ####  Testing variable : sensing priority            ###
 ##                                                    ##
@@ -517,15 +453,13 @@ if [ "$option" == "simpleSensingIntervals" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --sensingInterval=$Interval --seed=$nseed --nBss=2 --nAxBss=1 --simulationTime=60.0" >/home/manuel/HiWi/Result/Result_sensInterval/"Interval=$Interval"/nolog_priority=seed=$nseed.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --sensingInterval=$Interval --seed=$nseed --nBss=2 --nAxBss=1 --simulationTime=60.0" >/$Save_loc/Result/Result_sensInterval/"Interval=$Interval"/nolog_priority=seed=$nseed.out 2>&1
 
             ) &
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed" >/home/manuel/HiWi/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
-
+            
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
                 wait
             fi
@@ -544,15 +478,13 @@ if [ "$option" == "residentialSensPrioScenario" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --sensingPriority=$prio --seed=$nseed --scenario=3 --simulationTime=60.0" >/home/manuel/HiWi/Result/Result_sensPrio/Result_sensPrio_Residential/"prio=$prio"/nolog_priority=seed=$nseed.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --sensingPriority=$prio --seed=$nseed --scenario=3 --simulationTime=60.0" >/$Save_loc/Result/Result_sensPrio/Result_sensPrio_Residential/"prio=$prio"/nolog_priority=seed=$nseed.out 2>&1
 
             ) &
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed" >/home/manuel/HiWi/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
-
+            
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
                 wait
             fi
@@ -571,15 +503,13 @@ if [ "$option" == "Bandwidth" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --channelWidth=$band --seed=$nseed --nBss=2 --nAxBss=1 --nStations=4 --simulationTime=10.0" >/home/manuel/HiWi/Result/Result_bandwidth_based/"b=$band"/nolog_bandwidth=seed=$nseed.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --channelWidth=$band --seed=$nseed --nBss=2 --nAxBss=1 --nStations=4 --simulationTime=10.0" >/$Save_loc/Result/Result_bandwidth_based/"b=$band"/nolog_bandwidth=seed=$nseed.out 2>&1
 
             ) &
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed" >/home/manuel/HiWi/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
-
+            
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
                 wait
             fi
@@ -590,10 +520,7 @@ fi
 ##                                                    ##
 ####  Testing variable : radius single BSS (1 seed)  ###
 ##                                                    ##
-# seed=("2")
 seed=("347")
-# seed=("347" "722" "876" "59" "463")
-# seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498") # 10 seed values
 radius=("1" "2" "3" "4" "5" "6" "7" "8" "9" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30")
 if [ "$option" == "radiusSingle" ]; then
     counter=0
@@ -603,15 +530,12 @@ if [ "$option" == "radiusSingle" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed --nStations=9 --simulationTime=1.0" >/home/manuel/HiWi/Result/Result_distance-1seedbased/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed --nStations=9 --simulationTime=1.0" >/$Save_loc/Result/Result_distance-1seedbased/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
 
             ) &
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed" >/home/manuel/HiWi/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
-
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
                 wait
             fi
@@ -621,13 +545,9 @@ fi
 
 
 ##                                                    ##
-####  Testing variable : radius single BSS (1 seed)  ###
+###  Testing variable : nAxBss for checking latency  ###
 ##                                                    ##
-# seed=("2")
-# seed=("347")
-# seed=("347" "722" "876" "59" "463")
 seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498") # 10 seed values
-# nAxBss=("1" "2" "3" "4" "5" "6" "7" "8" "9" "10")
 nAxBss=("1" "2" "3" "4" "5" "6" "7" "8" "9" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "40" "41" "42" "43" "44" "45" "46" "47" "48" "49" "50" "51" "52" "53" "54" "55" "56" "57" "58" "59" "60" "61" "62" "63" "64" "65" "66" "67" "68" "69" "70" "71" "72" "73" "74" "75" "76" "77" "78" "79" "80" "81" "82" "83" "84" "85" "86" "87" "88" "89" "90" "91" "92" "93" "94" "95" "96" "97" "98" "99" "100")
 if [ "$option" == "checkAxLatency" ]; then
     counter=0
@@ -637,15 +557,40 @@ if [ "$option" == "checkAxLatency" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                # Example of running your program with parameters
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=4 --enableFrameAggregation=1=0 --seed=$nseed --nBss=$nBss --nAxBss=$nBss --simulationTime=10.0" > /home/manuel/HiWi/Result/Result_AxLatency/"nAxBss=$nBss"/nolog_nAxBss=$nBss,seed=$nseed.out 2>&1
+               ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=4 --enableFrameAggregation=1 --seed=$nseed --nBss=$nBss --nAxBss=$nBss --simulationTime=10.0" > /$Save_loc/Result/Result_AxLatency/"nAxBss=$nBss"/nolog_nAxBss=$nBss,seed=$nseed.out 2>&1
 
             ) &
-            # ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed" >/home/manuel/HiWi/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
-
+            
             ((counter++))
 
-            # # Limit the number of parallel processes (adjust as needed)
+            # Limit the number of parallel processes (adjust as needed)
+            if ((counter % 20 == 0)); then
+                wait
+            fi
+        done
+    done
+fi
+
+##                                                    ##
+###  Testing variable : nAxBss for checking latency  ###
+##                                                    ##
+seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498") # 10 seed values
+nAxBss=("1" "2" "3" "4" "5" "6" "7" "8" "9" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "40" "41" "42" "43" "44" "45" "46" "47" "48" "49" "50" "51" "52" "53" "54" "55" "56" "57" "58" "59" "60" "61" "62" "63" "64" "65" "66" "67" "68" "69" "70" "71" "72" "73" "74" "75" "76" "77" "78" "79" "80" "81" "82" "83" "84" "85" "86" "87" "88" "89" "90" "91" "92" "93" "94" "95" "96" "97" "98" "99" "100")
+if [ "$option" == "checkAxLatency" ]; then
+    counter=0
+    for nBss in "${nAxBss[@]}"; do
+        for nseed in "${seed[@]}"; do
+            echo "Processing file $counter: nAxBss = $nBss, Seed = $nseed"
+
+            # Run each iteration in the background for parallel processing
+            (
+               ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=4 --enableFrameAggregation=1 --seed=$nseed --nBss=$nBss --nAxBss=$nBss --simulationTime=10.0" > /$Save_loc/Result/Result_AxLatency/"nAxBss=$nBss"/nolog_nAxBss=$nBss,seed=$nseed.out 2>&1
+
+            ) &
+            
+            ((counter++))
+
+            # Limit the number of parallel processes (adjust as needed)
             if ((counter % 20 == 0)); then
                 wait
             fi
