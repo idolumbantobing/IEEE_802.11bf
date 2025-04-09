@@ -30,8 +30,8 @@ residntialDensity=("0" "1")
 Bandwidth=("20" "40" "80" "160")
 size=${#seed[@]}
 
-# Change / Fill this variable for the save location in local ! 
-export Save_loc="/home/manuel/HiWi"
+# Change and fill this variable for the save location in local, for example /home/ns3/WifiSensing ! 
+export Save_loc=""
 
 ################################################################################################
 #                          Run the program with different variable                             #
@@ -320,7 +320,6 @@ if [ "$option" == "multipleBssRatio" ]; then
     done
 fi
 
-sensingInterval=("10" "50" "100" "500" "1000")
 if [ "$option" == "multipleBssBfInterval" ]; then
     counter=0
     for Interval in "${sensingInterval[@]}"; do
@@ -364,30 +363,6 @@ if [ "$option" == "multipleBssBfIntervalOffice" ]; then
                 wait
             fi
 
-        done
-    done
-fi
-
-##                                                    ##
-####             Testing variable : mcs              ###
-##                                                    ##
-if [ "$option" == "mcs" ]; then
-    counter=0
-    for nMcs in "${mcs[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: mcs = $nMcs, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-               ./ns3 run "examples/wireless/wifi-bf-network.cc --mcs=$nMcs --seed=$nseed" >/$Save_loc/Result/Result_mcs-based/"mcs=$nMcs"/nolog_nMcs=$nMcs,seed=$nseed.out 2>&1
-            ) &
-            
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
         done
     done
 fi
@@ -442,55 +417,6 @@ if [ "$option" == "idealSensPrioScenario" ]; then
     done
 fi
 
-##                                                    ##
-####  Testing variable : sensing priority            ###
-##                                                    ##
-if [ "$option" == "simpleSensingIntervals" ]; then
-    counter=0
-    for Interval in "${simpleSensingIntervals[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: Interval = $Interval, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --sensingInterval=$Interval --seed=$nseed --nBss=2 --nAxBss=1 --simulationTime=60.0" >/$Save_loc/Result/Result_sensInterval/"Interval=$Interval"/nolog_priority=seed=$nseed.out 2>&1
-
-            ) &
-            
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
-
-##                                                    ##
-####  Testing variable : residential scenario        ###
-##                                                    ##
-if [ "$option" == "residentialSensPrioScenario" ]; then
-    counter=0
-    for prio in "${senPriority[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: prio = $prio, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --sensingPriority=$prio --seed=$nseed --scenario=3 --simulationTime=60.0" >/$Save_loc/Result/Result_sensPrio/Result_sensPrio_Residential/"prio=$prio"/nolog_priority=seed=$nseed.out 2>&1
-
-            ) &
-            
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
 
 ##                                                    ##
 ####  Testing variable : Bandwidth scenario        ###
@@ -511,87 +437,6 @@ if [ "$option" == "Bandwidth" ]; then
 
             # Limit the number of parallel processes (adjust as needed)
             if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
-
-##                                                    ##
-####  Testing variable : radius single BSS (1 seed)  ###
-##                                                    ##
-seed=("347")
-radius=("1" "2" "3" "4" "5" "6" "7" "8" "9" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30")
-if [ "$option" == "radiusSingle" ]; then
-    counter=0
-    for rad in "${radius[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: radius = $rad, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --radius=$rad --seed=$nseed --nStations=9 --simulationTime=1.0" >/$Save_loc/Result/Result_distance-1seedbased/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
-
-            ) &
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
-
-
-##                                                    ##
-###  Testing variable : nAxBss for checking latency  ###
-##                                                    ##
-seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498") # 10 seed values
-nAxBss=("1" "2" "3" "4" "5" "6" "7" "8" "9" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "40" "41" "42" "43" "44" "45" "46" "47" "48" "49" "50" "51" "52" "53" "54" "55" "56" "57" "58" "59" "60" "61" "62" "63" "64" "65" "66" "67" "68" "69" "70" "71" "72" "73" "74" "75" "76" "77" "78" "79" "80" "81" "82" "83" "84" "85" "86" "87" "88" "89" "90" "91" "92" "93" "94" "95" "96" "97" "98" "99" "100")
-if [ "$option" == "checkAxLatency" ]; then
-    counter=0
-    for nBss in "${nAxBss[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: nAxBss = $nBss, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-               ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=4 --enableFrameAggregation=1 --seed=$nseed --nBss=$nBss --nAxBss=$nBss --simulationTime=10.0" > /$Save_loc/Result/Result_AxLatency/"nAxBss=$nBss"/nolog_nAxBss=$nBss,seed=$nseed.out 2>&1
-
-            ) &
-            
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 20 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
-
-##                                                    ##
-###  Testing variable : nAxBss for checking latency  ###
-##                                                    ##
-seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498") # 10 seed values
-nAxBss=("1" "2" "3" "4" "5" "6" "7" "8" "9" "10" "11" "12" "13" "14" "15" "16" "17" "18" "19" "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "40" "41" "42" "43" "44" "45" "46" "47" "48" "49" "50" "51" "52" "53" "54" "55" "56" "57" "58" "59" "60" "61" "62" "63" "64" "65" "66" "67" "68" "69" "70" "71" "72" "73" "74" "75" "76" "77" "78" "79" "80" "81" "82" "83" "84" "85" "86" "87" "88" "89" "90" "91" "92" "93" "94" "95" "96" "97" "98" "99" "100")
-if [ "$option" == "checkAxLatency" ]; then
-    counter=0
-    for nBss in "${nAxBss[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: nAxBss = $nBss, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-               ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=4 --enableFrameAggregation=1 --seed=$nseed --nBss=$nBss --nAxBss=$nBss --simulationTime=10.0" > /$Save_loc/Result/Result_AxLatency/"nAxBss=$nBss"/nolog_nAxBss=$nBss,seed=$nseed.out 2>&1
-
-            ) &
-            
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 20 == 0)); then
                 wait
             fi
         done
