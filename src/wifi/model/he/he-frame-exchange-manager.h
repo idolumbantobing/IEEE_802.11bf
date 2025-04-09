@@ -143,7 +143,7 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
 
     /*
     *************************************
-    Attempt to add Channel Sounding from ns3.37
+    Changes to add support for IEEE 802.11bf
     Public Functions for HE Frame Exchange Manager
     *************************************
     */
@@ -167,19 +167,13 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
      * \return Wifi mode used to transmit beamforming reports in channel sounding
      */
     std::string GetCsMode() const;
-
-    /*
-    *************************************
-    Attempt to add support for MU-MIMO functionality
-    Public Functions for HE Frame Exchange Manager
-    *************************************
-    */ 
-        
     /**
-     * Take the necessary actions when receiving a Polling Frame.
-     *
+     * Take the necessary actions when receiving a Polling Frame
      */
     void ReceivePollingFrame(const CtrlTriggerHeader& trigger, const WifiMacHeader& hdr);
+    /**
+     * Reset function to wipe up the PSDU map and TX parameters due to timeout
+     */
     void ResetSensingTimeout();
 
   protected:
@@ -391,7 +385,7 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
 
     /*
     *************************************
-    Attempt to add Channel Sounding from ns3.37
+    Changes to add support for IEEE 802.11bf
     Protected Attributes for HE Frame Exchange Manager
     *************************************
     */
@@ -400,13 +394,6 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
         m_csBeamformer; //!< The channel sounding beamformer pointer (null if not a beamformer)
     Ptr<CsBeamformee>
         m_csBeamformee; //!< The channel sounding beamformee pointer (null if not a beamformee)
-
-    /*
-    *************************************
-    Attempt to add support for MU-MIMO functionality
-    Protected Functions for HE Frame Exchange Manager
-    *************************************
-    */
 
   private:
     /**
@@ -445,7 +432,7 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
 
     /*
     *************************************
-    Attempt to add Channel Sounding from ns3.37
+    Changes to add support for IEEE 802.11bf
     Private Functions and Attributes for HE Frame Exchange Manager
     *************************************
     */
@@ -463,16 +450,8 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
     Time m_lastCsTime;       //!< Duration of channel sounding process
     bool m_csDurationOutput; //!< Whether to output the duration of channel sounding process
     std::string m_csMode;    //! Wifi mode used for beamforming report feedback
-
-    /*
-    *************************************
-    Attempt to add support for MU-MIMO functionality
-    Private Functions for HE Frame Exchange Manager
-    *************************************
-    */
     bool m_NDPA_Sounding_mutex = 0;
     bool m_Polling_Receive_mutex = 0;
-    // Time remainingTxopForSensing = m_apMac->GetRemainingCfpDuration();
 };
 
 } // namespace ns3

@@ -67,9 +67,6 @@ InfrastructureWifiMac::InfrastructureWifiMac()
     m_txop = CreateObject<Txop>();
     GetTxop()->SetInfMac(this);
     m_txop->SetTxMiddle(m_txMiddle);
-    // m_txop->SetTxOkCallback(MakeCallback(&InfrastructureWifiMac::TxOk, this));
-    // m_txop->SetTxFailedCallback(MakeCallback(&InfrastructureWifiMac::TxFailed, this));
-    m_txop->SetTxDroppedCallback(MakeCallback(&InfrastructureWifiMac::NotifyTxDrop, this));
 }
 
 InfrastructureWifiMac::~InfrastructureWifiMac()
@@ -213,11 +210,6 @@ InfrastructureWifiMac::EndTxNoAck(uint8_t linkId)
     }
 }
 
-WifiTxVector
-InfrastructureWifiMac::GetRtsTxVector(Ptr<const WifiMpdu> item, uint8_t linkId) const
-{
-    return GetWifiRemoteStationManager(linkId)->GetRtsTxVector(item->GetHeader().GetAddr1());
-}
 /*
  *************************************
  Attempt to add PCF from ns3.33

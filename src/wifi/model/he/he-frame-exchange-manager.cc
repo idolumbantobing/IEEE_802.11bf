@@ -72,7 +72,6 @@ HeFrameExchangeManager::GetTypeId()
             .SetParent<VhtFrameExchangeManager>()
             .AddConstructor<HeFrameExchangeManager>()
             .SetGroupName("Wifi")
-            // attempt to add channel sounding from ns3.37 : add new attributes
             .AddAttribute("PrintChannelSoundingDuration",
                           "If enabled, the duration of channel sounding process will be printed.",
                           BooleanValue(false),
@@ -130,7 +129,7 @@ HeFrameExchangeManager::SetWifiMac(const Ptr<WifiMac> mac)
     m_staMac = DynamicCast<StaWifiMac>(mac);
     VhtFrameExchangeManager::SetWifiMac(mac);
 
-    // attempt to add channel sounding from ns3.37 : create a new instance of CsBeamformer and
+    // Changes to add support for IEEE 802.11bf : create a new instance of CsBeamformer and
     // CsBeamformee
     if (m_apMac != nullptr)
     {
@@ -164,7 +163,7 @@ HeFrameExchangeManager::DoDispose()
     m_muScheduler = nullptr;
     m_multiStaBaEvent.Cancel();
 
-    // attempt to add channel sounding from ns3.37 : dispose the instances of CsBeamformer and
+    // Changes to add support for IEEE 802.11bf : dispose the instances of CsBeamformer and
     // CsBeamformee
     m_csBeamformer = nullptr;
     m_csBeamformee = nullptr;
@@ -224,7 +223,7 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
             if (m_apMac->GetPcfSupported())
             {
                 txFormat = m_muScheduler->NotifyAccessGranted(edca,
-                                                              availableTime,
+                                                              m_apMac->GetRemainingCfpDuration(),
                                                               initialFrame,
                                                               m_allowedWidth,
                                                               m_linkId);
@@ -235,7 +234,7 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
             if (m_staMac->GetPcfSupported())
             {
                 txFormat = m_muScheduler->NotifyAccessGranted(edca,
-                                                              availableTime,
+                                                              m_apMac->GetRemainingCfpDuration(),
                                                               initialFrame,
                                                               m_allowedWidth,
                                                               m_linkId);
@@ -277,7 +276,7 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
         return true;
     }
 
-    // Attempt to modify the MU-OFDMA for IEEE 802.11bf polling phase
+    // Changes to add support for IEEE 802.11bf
     if (txFormat == MultiUserScheduler::BF_POLL_DL_TX)
     {
         NS_LOG_INFO("HeFrameExchangeManager::StartFrameExchange line 255 : BF_POLL_DL_TX");
@@ -319,10 +318,6 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
                             this,
                             m_psduMap,
                             m_txParams);
-
-        // Simulator::Schedule(m_apMac->GetCfpMaxDuration(),
-        //                     &HeFrameExchangeManager::resetSensingTimeout,
-        //                     this);
         m_psduMap.clear();
         return true;
     }
@@ -344,14 +339,6 @@ HeFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
         m_NDPA_Sounding_mutex = 0;
         SendCsFramesFromBeamformer();
         m_psduMap.clear();
-        return true;
-    }
-
-    // attempt to add channel sounding from ns3.37 : start channel sounding
-    if (txFormat == MultiUserScheduler::CS_TX)
-    {
-        m_lastCsTime = Simulator::Now();
-        SendCsFramesFromBeamformer();
         return true;
     }
 
@@ -673,8 +660,7 @@ HeFrameExchangeManager::SendPsduMap()
 {
     NS_LOG_FUNCTION(this);
 
-    // attempt to modify the multi user for 11bf
-    // NS_ASSERT(m_txParams.m_acknowledgment);
+    // NS_ASSERT(m_txParams.m_acknowledgment);   // changes to modify the multi user for 11bf
     NS_ASSERT(!m_txTimer.IsRunning());
 
     WifiTxTimer::Reason timerType = WifiTxTimer::NOT_RUNNING; // no timer
@@ -882,7 +868,7 @@ HeFrameExchangeManager::SendPsduMap()
         responseTxVector = &acknowledgment->tbPpduTxVector;
         m_trigVector = GetTrigVector(m_muScheduler->GetUlMuInfo(m_linkId).trigger);
     }
-    // attempt to add channel sounding from ns3.37 : sending condition for trigger psdu
+    // Changes to add support for IEEE 802.11bf : sending condition for trigger psdu
     else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsTrigger())
     {
         CtrlTriggerHeader trigger;
@@ -907,8 +893,6 @@ HeFrameExchangeManager::SendPsduMap()
                 NS_ASSERT(m_apMac);
 
                 // record the set of stations solicited by this Trigger Frame
-                // Note : this list is to be discussed
-                // m_staExpectTbPpduFrom.clear();
                 staExpectResponseFrom.clear(); // instead defined as this one
 
                 for (const auto& userInfo : trigger)
@@ -930,7 +914,6 @@ HeFrameExchangeManager::SendPsduMap()
                                                                m_phy->GetPhyBand());
 
                 timerType = WifiTxTimer::WAIT_QOS_NULL_AFTER_BSRP_TF;
-                // txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
                 responseTxVector = &txVector;
                 m_trigVector = GetTrigVector(m_muScheduler->GetUlMuInfo(m_linkId).trigger);
             }
@@ -942,8 +925,6 @@ HeFrameExchangeManager::SendPsduMap()
                 NS_ASSERT(m_apMac);
 
                 // record the set of stations solicited by this Trigger Frame
-                // Note : this list is to be discussed
-                // m_staExpectTbPpduFrom.clear();
                 staExpectResponseFrom.clear(); // instead defined as this one
 
                 for (const auto& userInfo : trigger)
@@ -965,21 +946,9 @@ HeFrameExchangeManager::SendPsduMap()
                                                                m_phy->GetPhyBand());
 
                 timerType = WifiTxTimer::WAIT_QOS_NULL_AFTER_BSRP_TF;
-                // txVector = trigger.GetHeTbTxVector(trigger.begin()->GetAid12());
                 responseTxVector = &txVector;
                 m_trigVector =
                     GetTrigVector(m_muScheduler->GetPollingMuInfo(m_linkId).triggerUlPoll);
-                // Time txDuration = HePhy::ConvertLSigLengthToHeTbPpduDuration(
-                //     m_muScheduler->GetPollingMuInfo(m_linkId)
-                //         .txParamsTriggerUlPoll.m_txVector.GetLength(),
-                //     m_muScheduler->GetPollingMuInfo(m_linkId).txParamsTriggerUlPoll.m_txVector,
-                //     m_phy->GetPhyBand());
-                // Time timeout = txDuration + m_phy->GetSifs() + m_phy->GetSlot() +
-                //                m_phy->CalculatePhyPreambleAndHeaderDuration(*responseTxVector);
-                // auto hePhy = StaticCast<HePhy>(m_phy->GetPhyEntity(WIFI_MOD_CLASS_HE));
-                // hePhy->SetTrigVector(
-                //     GetTrigVector(m_muScheduler->GetPollingMuInfo(m_linkId).triggerUlPoll),
-                //     timeout);
             }
         }
     }
@@ -998,7 +967,7 @@ HeFrameExchangeManager::SendPsduMap()
         responseTxVector = &txVector;
         staExpectResponseFrom.insert(recv);
     }
-    // attempt to add channel sounding from ns3.37 : sending condition for no acknowledgment
+    // Changes to add support for IEEE 802.11bf : sending condition for no acknowledgment
     else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsNdpa())
     {
         // No response is expected, so do nothing.
@@ -1056,7 +1025,7 @@ HeFrameExchangeManager::SendPsduMap()
                                                                 m_txParams.m_txVector,
                                                                 m_phy->GetPhyBand());
     }
-    // attempt to add channel sounding from ns3.37 : calculate duration for channel sounding
+    // Changes to add support for IEEE 802.11bf : calculate duration for channel sounding
     else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsActionNoAck() &&
              m_csBeamformee != nullptr &&
              m_csBeamformee->GetHeMimoControlHeader().GetFeedbackType() == HeMimoControlHeader::SU)
@@ -1085,14 +1054,16 @@ HeFrameExchangeManager::SendPsduMap()
                                 &HeFrameExchangeManager::SendPsduMap,
                                 this);
         }
-        // attempt to add channel sounding from ns3.37 : star
         // else if (!m_txParams.m_txVector.IsUlMu())
         else if (!m_txParams.m_txVector.IsUlMu() &&
                  ((m_csBeamformee != nullptr && !m_csBeamformee->IsNdpaReceived()) ||
-                  (m_csBeamformer != nullptr && !m_csBeamformer->IsNdpaSent())))
+                  (m_csBeamformer != nullptr &&
+                   !m_csBeamformer->IsNdpaSent()))) // changes to add channel sounding ffo 11bf
         {
-            // attempt to modify the MU-MIMO for 11bf : add condition to handle the polling frame
-            if ((*m_psduMap.begin()->second->begin())->GetHeader().IsCfPoll())
+            if ((*m_psduMap.begin()->second->begin())
+                    ->GetHeader()
+                    .IsCfPoll()) // changes to modify the MU-MIMO for 11bf : add condition to handle
+                                 // the polling frame
             {
             }
             else if ((*m_psduMap.begin()->second->begin())->GetHeader().IsCts())
@@ -1112,12 +1083,6 @@ HeFrameExchangeManager::SendPsduMap()
                        m_phy->CalculatePhyPreambleAndHeaderDuration(*responseTxVector);
         if (m_apMac && m_apMac->GetPcfSupported())
         {
-            // std::cout << m_apMac->GetCfpMaxDuration()<< std::endl;
-            // std::cout << m_apMac->GetCfpMaxDuration() - timeout << std::endl;
-            // std::cout << timeout << std::endl;
-            // m_channelAccessManager->NotifyAckTimeoutStartNow(m_apMac->GetCfpMaxDuration());
-            // m_channelAccessManager->NotifyAckTimeoutStartNow(m_apMac->GetCfpMaxDuration() -
-            // timeout); m_channelAccessManager->NotifyAckTimeoutStartNow(timeout);
         }
         else
         {
@@ -1175,9 +1140,7 @@ HeFrameExchangeManager::SendPsduMap()
                           m_psduMap.begin()->second,
                           m_txParams.m_txVector);
             break;
-            // attempt to add channel sounding from ns3.37 : timer for beamforming report
-            // modification : adding staExpectResponseFrom as a parameter because changes of set
-            // function
+            // changes to add channel sounding for IEEE 802.11bf : timer for beamforming report
         case WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF:
             m_txTimer.Set(timerType,
                           timeout,
@@ -1205,12 +1168,10 @@ HeFrameExchangeManager::SendPsduMap()
     if (timerType == WifiTxTimer::WAIT_BLOCK_ACKS_IN_TB_PPDU ||
         timerType == WifiTxTimer::WAIT_TB_PPDU_AFTER_BASIC_TF ||
         timerType == WifiTxTimer::WAIT_QOS_NULL_AFTER_BSRP_TF ||
-        timerType == WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF) // attempt to add channel sounding
-                                                                // ns3.37 : add waiting condition
-                                                                // for beamforming report
+        timerType ==
+            WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF) // changes for IEEE 802.11bf : add waiting
+                                                       // condition for beamforming report
     {
-        // attempt to add channel sounding from ns3.37 : add another waiting condition for
-        // beamforming report
         if (timerType == WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF)
         {
             Time timeout = txDuration + m_phy->GetSifs() + m_phy->GetSlot() +
@@ -1226,7 +1187,7 @@ HeFrameExchangeManager::SendPsduMap()
             hePhy->SetTrigVector(m_trigVector, m_txTimer.GetDelayLeft());
         }
     }
-    // attempt to add channel sounding from ns3.37 : add condition to reset received ndpa status
+    // changes for IEEE 802.11bf: add condition to reset received ndpa status
     else if (timerType == WifiTxTimer::NOT_RUNNING &&
              ((m_csBeamformee != nullptr && m_csBeamformee->IsNdpaReceived() &&
                (*m_psduMap.begin()->second->begin())->GetHeader().IsActionNoAck())))
@@ -1239,13 +1200,12 @@ HeFrameExchangeManager::SendPsduMap()
         // clear m_psduMap after sending QoS Null frames following a BSRP Trigger Frame
         Simulator::Schedule(txDuration, &WifiPsduMap::clear, &m_psduMap);
     }
-    // Attempt to modify MU-MIMO for 11bf polling phase
-    // Handling the DL poll frame transmission
+    // changes for IEEE 802.11bf: Handling the DL poll frame transmission
     else if (timerType == WifiTxTimer::NOT_RUNNING && m_txParams.m_txVector.IsDlMu() &&
              m_apMac->GetPcfSupported() && m_psduMap.begin()->second->GetHeader(0).IsCfPoll())
     {
         // clear m_psduMap after sending QoS Null frames following a BSRP Trigger Frame
-        // Simulator::Schedule(txDuration, &WifiPsduMap::clear, &m_psduMap);
+        Simulator::Schedule(txDuration, &WifiPsduMap::clear, &m_psduMap);
     }
 }
 
@@ -2641,8 +2601,7 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
         // the received TB PPDU has been processed
         return;
     }
-    // attempt to add channel sounding from ns3.37 : add condition for receiving from timer
-    // perspective
+    // changes for IEEE 802.11bf : add condition for receiving reporting frame
     if (hdr.IsActionNoAck() && m_apMac != nullptr && m_txTimer.IsRunning() &&
         (m_txTimer.GetReason() == WifiTxTimer::WAIT_BF_REPORT_AFTER_NDP ||
          m_txTimer.GetReason() == WifiTxTimer::WAIT_BF_REPORT_AFTER_BFRP_TF))
@@ -2653,7 +2612,6 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
                                                    staId) != m_csBeamformer->GetCsStaIdList().end())
         {
             m_csBeamformer->GetBfReportInfo(mpdu, staId);
-            // m_csBeamformer->PrintChannelInfo();
             std::list<uint16_t> sta = m_csBeamformer->CheckAllChannelInfoReceived();
             if (sta.empty())
             {
@@ -2676,9 +2634,8 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
                               << std::to_string(m_csBeamformer->GetNumCsStations()) << std::endl;
                 }
 
-                // if (m_apMac->GetPcfSupported() &&
-                //     (m_apMac->GetRemainingCfpDuration()).IsStrictlyPositive())
-                if (m_apMac->GetPcfSupported())
+                if (m_apMac->GetPcfSupported() &&
+                    (m_apMac->GetRemainingCfpDuration()).IsStrictlyPositive())
                 {
                     if (m_muScheduler->GetSoundingType() == 0U &&
                         m_muScheduler->DoSUNDPASoundingStation() &&
@@ -2697,13 +2654,10 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
                                                                           Simulator::Now(),
                                                                           true);
                         m_psduMap.clear();
-                        // m_edca->ResetCw(m_linkId);
                         m_edca->EndTxNoAck(m_linkId, mpdu);
-                        m_edca->NotifyChannelReleasedForPCF(0U, false, Seconds(0));
+                        m_edca->NotifyChannelReleasedForPcf(0U, false, Seconds(0));
                         ResetSensingTimeout();
                         m_apMac->EndSensing();
-                        // std::cout << "Sensing successfully ended from : " << GetAddress() << " "
-                        //           << Simulator::Now() << std::endl;
                         m_edca = nullptr;
                     }
                 }
@@ -2717,15 +2671,12 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
 
         return;
     }
-    // attempt to add channel sounding from ns3.37 : add condition for case NDP frame is received
+    // Changes to add support for IEEE 802.11bf : add condition for case NDP frame is received
     if (hdr.IsNdp() && m_staMac != nullptr && m_csBeamformee != nullptr &&
         m_csBeamformee->IsNdpaReceived())
     {
         uint16_t staId = m_staMac->GetAssociationId();
-        //  Get NDP frame information and calculate channel information
         m_csBeamformee->GetNdpInfo(txVector, staId);
-
-        // m_csBeamformee->PrintChannelInfo();
         m_csBeamformee->GenerateBfReport(staId, hdr.GetAddr2(), m_staMac->GetAddress(), m_bssid);
         if (mpdu->GetHeader().GetAddr1().IsBroadcast())
         {
@@ -3177,9 +3128,8 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
                                         hdr);
                 }
             }
-            // attempt to add channel sounding from ns3.37 : add condition with case trigger frame
-            // is for BFRP
-            else if (trigger.IsBfrp())
+            else if (trigger.IsBfrp()) // Changes to add support for IEEE 802.11bf: add condition
+                                       // with case trigger frame is for BFRP
             {
                 if (mpdu->GetHeader().GetAddr1().IsBroadcast())
                 {
@@ -3197,7 +3147,7 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
                                     hdr);
             }
         }
-        // attempt to add channel sounding from ns3.37 : add condition if recevied frame NDPA
+        // Changes to add support for IEEE 802.11bf : add condition if recevied frame NDPA
         else if (hdr.IsNdpa() && m_csBeamformee != nullptr)
         {
             CtrlNdpaHeader ndpaHeader;
@@ -3390,13 +3340,6 @@ HeFrameExchangeManager::EndReceiveAmpdu(Ptr<const WifiPsdu> psdu,
     VhtFrameExchangeManager::EndReceiveAmpdu(psdu, rxSignalInfo, txVector, perMpduStatus);
 }
 
-/*
-*************************************
-Attempt to add Channel Sounding from ns3.37
-Public Functions for HE Frame Exchange Manager
-*************************************
-*/
-
 void
 HeFrameExchangeManager::ReceiveBfrpTrigger(const CtrlTriggerHeader& trigger,
                                            const WifiMacHeader& hdr)
@@ -3531,13 +3474,6 @@ HeFrameExchangeManager::GetCsMode() const
     return m_csMode;
 }
 
-/*
-*************************************
-Attempt to add Channel Sounding from ns3.37
-Public Functions for HE Frame Exchange Manager
-*************************************
-*/
-
 void
 HeFrameExchangeManager::ReceivePollingFrame(const CtrlTriggerHeader& trigger,
                                             const WifiMacHeader& hdr)
@@ -3623,12 +3559,6 @@ HeFrameExchangeManager::ResetSensingTimeout()
         m_Polling_Receive_mutex = 0;
         m_NDPA_Sounding_mutex = 0;
         m_muScheduler->SensingTimeout();
-        if (m_edca)
-        {
-            // DequeueMpdu(m_edca->PeekNextMpdu(m_linkId));
-            // m_edca->NotifyChannelReleasedForPCF(0U, true, Seconds(0));
-            // m_apMac->SensingRetransmission();
-        }
     }
 }
 

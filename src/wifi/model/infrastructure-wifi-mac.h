@@ -76,15 +76,6 @@ class InfrastructureWifiMac : public WifiMac
     *************************************
     */
     /**
-     * Return a TXVECTOR for the Data frame given the destination.
-     * The function consults WifiRemoteStationManager, which controls the rate
-     * to different destinations.
-     *
-     * \param item the item being asked for TXVECTOR
-     * \return TXVECTOR for the given item
-     */
-    WifiTxVector GetDataTxVector(Ptr<const WifiMpdu> item) const;
-    /**
      * \param duration the maximum duration for the CF period.
      */
     void SetCfpMaxDuration(Time duration);
@@ -212,16 +203,6 @@ class InfrastructureWifiMac : public WifiMac
     Time m_cfpStart;          //!< The time when the latest CF period started
     Time m_lastBeacon;        //!< The time when the last beacon frame transmission started
     Time m_cfpForeshortening; //!< The delay the current CF period should be foreshortened
-
-    /**
-     * Return a TXVECTOR for the RTS frame given the destination.
-     * The function consults WifiRemoteStationManager, which controls the rate
-     * to different destinations.
-     *
-     * \param item the item being asked for RTS TXVECTOR
-     * \return TXVECTOR for the RTS of the given item
-     */
-    WifiTxVector GetRtsTxVector(Ptr<const WifiMpdu> item, uint8_t linkId) const;
 
 };
 

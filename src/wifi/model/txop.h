@@ -424,7 +424,7 @@ class Txop : public Object
 
     /*
     *************************************
-    Attempt to add PCF from ns3.33
+    Changes to add support for IEEE 802.11bf
     Public Functions and Attributes for Txop
     *************************************
     */
@@ -436,58 +436,11 @@ class Txop : public Object
      */
     void SendCfFrame(WifiMacType frameType, Mac48Address addr, uint8_t linkId);
 
-    /* Event handlers */
-    /**
-     * Event handler when a CTS timeout has occurred.
-     */
-    virtual void MissedCts(uint8_t linkId);
-    /**
-     * Event handler when an Ack is missed.
-     */
-    virtual void MissedAck(uint8_t linkId);
-    /**
-     * Event handler when a CF-END frame is received.
-     */
-    void GotCfEnd(uint8_t linkId);
-    /**
-     * Event handler when a response to a CF-POLL frame is missed.
-     *
-     * \param expectedCfAck flag to indicate whether a CF-Ack was expected in the response.
-     */
-    void MissedCfPollResponse(bool expectedCfAck, uint8_t linkId);
-    /**
-     * Event handler when a BlockAck is received.
-     *
-     * \param blockAck BlockAck header.
-     * \param recipient address of the recipient.
-     * \param rxSnr SNR of the BlockAck itself in linear scale.
-     * \param dataSnr reported data SNR from the peer in linear scale.
-     * \param dataTxVector TXVECTOR used to send the Data.
-     */
-    virtual void GotBlockAck(const CtrlBAckResponseHeader* blockAck,
-                             Mac48Address recipient,
-                             double rxSnr,
-                             double dataSnr,
-                             WifiTxVector dataTxVector);
-    /**
-     * Event handler when a BlockAck timeout has occurred.
-     * \param nMpdus the number of MPDUs sent in the A-MPDU transmission that results in a BlockAck
-     * timeout.
-     */
-    virtual void MissedBlockAck(uint8_t nMpdus);
     /**
      * Event handler when a transmission that
      * does not require an Ack has completed.
      */
     virtual void EndTxNoAck(uint8_t linkId, Ptr<const WifiMpdu> mpdu, bool IsCfPeriod = false);
-    /**
-     * Cancel the transmission.
-     */
-    virtual void Cancel();
-    /**
-     * Start transmission for the next packet if allowed by the TxopLimit.
-     */
-    virtual void StartNextPacket();
     /**
      * Set InfrastructureWifiMac associated with this Txop.
      *
@@ -504,10 +457,6 @@ class Txop : public Object
      * \return the remaining duration in the current TXOP.
      */
     virtual Time GetTxopRemaining(void) const;
-    /**
-     * Update backoff and restart access if needed.
-     */
-    virtual void TerminateTxop(void);
     /**
      * \returns true if access has been requested for this function and
      *          has not been granted already, false otherwise.
@@ -540,17 +489,16 @@ class Txop : public Object
      */
     void SetTxFailedCallback(TxFailed callback);
     /**
-     * \param callback the callback to invoke when a
-     *        packet is dropped.
-     */
-    void SetTxDroppedCallback(TxDropped callback);
-    /**
      * Notify that channel has been released in case PCF for the given link.
      *
      * \param linkId the ID of the given link
      */
-    void NotifyChannelReleasedForPCF(uint8_t linkId, bool IsBfSensing, Time duration);
-
+    void NotifyChannelReleasedForPcf(uint8_t linkId, bool IsBfSensing, Time duration);
+    /**
+     * Get fuction for remaining allowed pcf duration
+     *
+     * \param linkId the ID of the given link
+     */
     Time GetPcfRemainingDuration(uint8_t linkId = 0U);
 
   protected:
@@ -669,7 +617,7 @@ class Txop : public Object
 
     /*
     *************************************
-    Attempt to add PCF from ns3.33
+    Changes to add support for IEEE 802.11bf
     Protected Functions and Attributes for Txop
     *************************************
     */
@@ -677,31 +625,9 @@ class Txop : public Object
     Ptr<const Packet> m_currentPacket; //!< the current packet
     WifiMacHeader m_currentHdr;        //!< the current header
     uint32_t lastCw;                    //!< the last CW value
-    uint8_t m_fragmentNumber;          //!< the fragment number
     TxOk m_txOkCallback;               //!< the transmit OK callback
     TxFailed m_txFailedCallback;       //!< the transmit failed callback
     TxDropped m_txDroppedCallback;     //!< the packet dropped callback
-
-    /**
-     * Check if the current packet should be fragmented.
-     *
-     * \return true if the current packet should be fragmented,
-     *         false otherwise
-     */
-    virtual bool NeedFragmentation(uint8_t linkId) const;
-
-    /**
-     * Restart access request if needed.
-     */
-    virtual void RestartAccessIfNeeded(uint8_t linkId);
-    /**
-     *
-     * Pass the packet included in the wifi MAC queue item to the
-     * packet dropped callback.
-     *
-     * \param item the wifi MAC queue item.
-     */
-    void TxDroppedPacket(Ptr<const WifiMpdu> item);
 
   private:
     /**
@@ -713,13 +639,6 @@ class Txop : public Object
 
     std::map<uint8_t, std::unique_ptr<LinkEntity>>
         m_links; //!< ID-indexed map of LinkEntity objects
-
-    /*
-    *************************************
-    Attempt to add PCF from ns3.33
-    Private Functions and Attributes for Txop
-    *************************************
-    */
 };
 
 } // namespace ns3

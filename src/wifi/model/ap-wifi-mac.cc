@@ -1630,7 +1630,6 @@ ApWifiMac::TxOk(Ptr<const WifiMpdu> mpdu)
         {
             if (GetQosSupported())
             {
-                // GetQosTxop(0U)->NotifyChannelReleasedForPCF(0U);
                 GetQosTxop(AcIndex(m_SensingPriority))->NotifyChannelReleased(0U);
             }
             else
@@ -2090,6 +2089,8 @@ ApWifiMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
                     m_cfPollingList.push_back(from);
                     if (m_itCfPollingList == m_cfPollingList.end())
                     {
+                        // For now it is assumed that the first station in the list is
+                        // the one to be polled
                         IncrementPollingListIterator();
                     }
                 }
@@ -2847,7 +2848,7 @@ ApWifiMac::SensingRetransmission(uint8_t linkId)
     {
         GetQosTxop(AcIndex(m_SensingPriority))->UpdateFailedCw(linkId);
         GetQosTxop(AcIndex(m_SensingPriority))
-            ->NotifyChannelReleasedForPCF(linkId, true, Seconds(0));
+            ->NotifyChannelReleasedForPcf(linkId, true, Seconds(0));
         Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_SensingPriority))->PeekNextMpdu(linkId);
         if (lastMpdu)
         {
@@ -2883,7 +2884,7 @@ ApWifiMac::EndSensing(uint8_t linkId)
 {
     NS_LOG_FUNCTION(this);
     NS_ASSERT(GetPcfSupported());
-
+    
     Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_SensingPriority))->PeekNextMpdu(linkId);
     if (lastMpdu)
     {
@@ -2907,10 +2908,8 @@ ApWifiMac::EndSensing(uint8_t linkId)
         {
             if (GetTxop()->IsAccessRequested(linkId) > 0)
             {
-                // Timeout there is collision
-                // GetTxop()->EndTxNoAck(linkId, nullptr);
                 GetTxop()->UpdateFailedCw(linkId);
-                GetTxop()->NotifyChannelReleasedForPCF(linkId, true, Seconds(0));
+                GetTxop()->NotifyChannelReleasedForPcf(linkId, true, Seconds(0));
                 StopCfPeriod();
             }
         }

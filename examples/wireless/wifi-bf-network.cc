@@ -230,7 +230,6 @@ MonitorChannelAccess(Mac48Address addr, ns3::Time currentTime, bool AccessGrante
             {
                 allCalculation_net2.find(addr)->second.m_sumTrueLatency = currentTime;
                 allCalculation_net2.find(addr)->second.stillSensing = true;
-                // std::cout << addr << " starting communication in " << currentTime << std::endl;
             }
         }
     }
@@ -255,8 +254,6 @@ MonitorChannelAccess(Mac48Address addr, ns3::Time currentTime, bool AccessGrante
                     (currentTime - allCalculation_net2.find(addr)->second.m_sumTrueLatency);
                 allCalculation_net2.find(addr)->second.m_innerCounter++;
                 allCalculation_net2.find(addr)->second.stillSensing = false;
-                // std::cout << addr << " doing communication for " << currentTime -
-                // allCalculation_net2.find(addr)->second.m_sumTrueLatency << std::endl;
             }
         }
     }
@@ -455,78 +452,6 @@ setLocationScenario(int scenario,
                     positionAlloc->Add(Vector(x, y, 0.0));
                 }
             }
-        }
-    }
-    else if (scenario == 2)
-    {
-        if ((nBfBss * (1 + nStations) + nAxBss * (1 + nStations_net2)) == 40)
-        {
-            std::cout << "Number of locations is not enough for the scenario" << std::endl;
-            return 0;
-        }
-
-        double AP_pos[40][3];
-        double STA_pos[40][3];
-        std::ifstream inFile;
-
-        std::stringstream fileName_pos_AP;
-        fileName_pos_AP
-            << "/home/idomanuel/workspace3.40/ns-3-allinone/ns-3.40/Residential/Location/"
-            << "position_AP_40" << ".txt";
-
-        inFile.open(fileName_pos_AP.str(), std::ios_base::in);
-        if (!inFile.is_open())
-        {
-            NS_LOG_ERROR("Can't open file!!!");
-        }
-        for (uint32_t j = 0; j < 3; j++)
-        {
-            for (uint32_t i = 0; i < 40; i++) // loop for RX
-            {
-                NS_ABORT_MSG_UNLESS(!inFile.eof(), "End of file!!!");
-                double pp;
-                inFile >> pp;
-                // if (i != apDensity - 1)
-                // {
-                //     char aux;
-                //     inFile >> aux;
-                // }
-                AP_pos[i][j] = pp;
-            }
-        }
-        inFile.close();
-
-        std::stringstream fileName_pos_STA;
-        fileName_pos_STA
-            << "/home/idomanuel/workspace3.40/ns-3-allinone/ns-3.40/Residential/Location/"
-            << "position_UE_40" << ".txt";
-
-        inFile.open(fileName_pos_STA.str(), std::ios_base::in);
-        if (!inFile.is_open())
-        {
-            NS_LOG_ERROR("Can't open file!!!");
-        }
-        for (uint32_t j = 0; j < 3; j++)
-        {
-            for (uint32_t i = 0; i < 40; i++) // loop for RX
-            {
-                NS_ABORT_MSG_UNLESS(!inFile.eof(), "End of file!!!");
-                double pp;
-                inFile >> pp;
-                // if (i != apDensity - 1)
-                // {
-                //     char aux;
-                //     inFile >> aux;
-                // }
-                STA_pos[i][j] = pp;
-            }
-        }
-        inFile.close();
-
-        for (uint32_t i = 0; i < 40; i++)
-        {
-            positionAlloc->Add(Vector(AP_pos[i][0], AP_pos[i][1], AP_pos[i][2]));
-            positionAlloc->Add(Vector(STA_pos[i][0], STA_pos[i][1], STA_pos[i][2]));
         }
     }
     else if (scenario == 3)
@@ -738,6 +663,57 @@ setLocationScenario(int scenario,
                 else if (indoorOfficeApOrder_vec[i + 6] == 0)
                 {
                     std::cout << "(ax)STA: " << x << ", " << y << std::endl;
+                }
+            }
+        }
+    }
+    else
+    {
+        double x_baseAp = 0.0;
+        double y_baseAp = 0.0;
+        double baseAngle = 0.0;
+        double rasioAngle = 0.0;
+
+        baseAngle = 2.0 * M_PI / nBss;
+        if (multipleBss)
+        {
+            rasioAngle = 1 / (sin(baseAngle / 2));
+            rasioAngle = 3;
+        }
+        std::cout << "rasioAngle: " << rasioAngle << std::endl;
+        for (int i = 0; i < nBss; i++)
+        {
+            x_baseAp = (rasioAngle * radius) * cos(baseAngle * i);
+            y_baseAp = (rasioAngle * radius) * sin(baseAngle * i);
+            if (i < nBfBss)
+            {
+                std::cout << "(bf)AP: " << x_baseAp << ", " << y_baseAp << std::endl;
+            }
+            else
+            {
+                std::cout << "(ax)AP: " << x_baseAp << ", " << y_baseAp << std::endl;
+            }
+            positionAlloc->Add(Vector(x_baseAp, y_baseAp, 0.0));
+            if (i < nBfBss)
+            {
+                double Angle = 2 * M_PI / allBss[i].nStations_sensing;
+                for (uint32_t j = 0; j < allBss[i].nStations_sensing; j++)
+                {
+                    double x = radius * cos(Angle * j) + x_baseAp;
+                    double y = radius * sin(Angle * j) + y_baseAp;
+                    std::cout << "(bf)STA: " << x << ", " << y << std::endl;
+                    positionAlloc->Add(Vector(x, y, 0.0));
+                }
+            }
+            else
+            {
+                double Angle = 2 * M_PI / allBss[i].nStations_no_sensing;
+                for (uint32_t j = 0; j < allBss[i].nStations_no_sensing; j++)
+                {
+                    double x = radius * cos(Angle * j) + x_baseAp;
+                    double y = radius * sin(Angle * j) + y_baseAp;
+                    std::cout << "(ax)STA: " << x << ", " << y << std::endl;
+                    positionAlloc->Add(Vector(x, y, 0.0));
                 }
             }
         }
@@ -1457,26 +1433,18 @@ main(int argc, char* argv[])
 
                 macAp_net2.SetType("ns3::ApWifiMac", "Ssid", SsidValue(ssid));
 
-                // macAp_net2.SetType(
-                //     "ns3::ApWifiMac",
-                //     "Ssid",
-                //     SsidValue(ssid),
-                //     "BE_MaxAmpduSize",
-                //     UintegerValue(
-                //         15523200), // Enable A-MPDU with the highest maximum size allowed by the
-                //         standard
-                //     "BE_MaxAmsduSize",
-                //     UintegerValue(11398)); // Enable A-MSDU with the highest maximum size (in
-                //     Bytes) allowed
-                //                            // by the standard);
+                if (!enableFrameAggregation)
+                {
+                    macAp_net2.SetType(
+                        "ns3::ApWifiMac",
+                        "BE_MaxAmpduSize",
+                        UintegerValue(0), // Enable A-MPDU with the highest maximum size allowed by
+                                          // the standard
+                        "BE_MaxAmsduSize",
+                        UintegerValue(
+                            0)); // Enable A-MSDU with the highest maximum size (in Bytes) allowed
+                }
 
-                // macAp.SetMultiUserScheduler("ns3::RrMultiUserScheduler",
-                //                             "EnableUlOfdma",
-                //                             BooleanValue(enableUlOfdma),
-                //                             "EnableBsrp",
-                //                             BooleanValue(true),
-                //                             "AccessReqInterval",
-                //                             TimeValue(accessReqInterval));
                 allBss[i].apDevice_net2 = wifi.Install(phy, macAp_net2, allBss[i].WifiApNode_net2);
 
                 macSta_net2.SetType("ns3::StaWifiMac",
@@ -1485,18 +1453,18 @@ main(int argc, char* argv[])
                                     "ManualConnection",
                                     BooleanValue(true));
 
-                // macSta_net2.SetType(
-                //     "ns3::StaWifiMac",
-                //     "Ssid",
-                //     SsidValue(ssid),
-                //     "BE_MaxAmpduSize",
-                //     UintegerValue(
-                //         15523200), // Enable A-MPDU with the highest maximum size allowed by the
-                //         standard
-                //     "BE_MaxAmsduSize",
-                //     UintegerValue(11398)); // Enable A-MSDU with the highest maximum size (in
-                //     Bytes) allowed
-                //                            // by the standard);
+                if (!enableFrameAggregation)
+                {
+                    macSta_net2.SetType(
+                        "ns3::StaWifiMac",
+                        "BE_MaxAmpduSize",
+                        UintegerValue(0), // Enable A-MPDU with the highest maximum size allowed by
+                                          // the standard
+                        "BE_MaxAmsduSize",
+                        UintegerValue(
+                            0)); // Enable A-MSDU with the highest maximum size (in Bytes) allowed
+                }
+                
                 allBss[i].staDevices_net2 =
                     wifi.Install(phy, macSta_net2, allBss[i].wifiStaNode_net2);
             }
@@ -1595,13 +1563,6 @@ main(int argc, char* argv[])
                 UintegerValue(0)); // Enable A-MSDU with the highest maximum size (in Bytes) allowed
         }
 
-        // macAp.SetMultiUserScheduler("ns3::RrMultiUserScheduler",
-        //                             "EnableUlOfdma",
-        //                             BooleanValue(enableUlOfdma),
-        //                             "EnableBsrp",
-        //                             BooleanValue(true),
-        //                             "AccessReqInterval",
-        //                             TimeValue(accessReqInterval));
         for (int i = nBfBss; i < nBss; i++)
         {
             allBss[i].apDevice_net2 = wifi.Install(phy, macAp_net2, allBss[i].WifiApNode_net2);
@@ -1986,7 +1947,7 @@ main(int argc, char* argv[])
 
                     for (uint32_t index = 0; index < allBss[i].wifiStaNode_net2.GetN(); ++index)
                     {
-                        //For TCP poisson traffic is not yet used here
+                        // For TCP poisson traffic is not yet used here
                         OnOffHelper onoff("ns3::TcpSocketFactory", Ipv4Address::GetAny());
                         onoff.SetAttribute("OnTime",
                                            StringValue("ns3::ConstantRandomVariable[Constant=1]"));

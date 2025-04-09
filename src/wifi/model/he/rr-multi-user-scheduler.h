@@ -54,7 +54,7 @@ class RrMultiUserScheduler : public MultiUserScheduler
 
     /*
     *************************************
-    Attempt to add support for IEEE 802.11bf
+    Changes to add support for IEEE 802.11bf
     Public Functions and Attributes for RR Multi User Scheduler
     *************************************
     */
@@ -188,13 +188,6 @@ class RrMultiUserScheduler : public MultiUserScheduler
      Private Functions and Attributes for RR Multi User Scheduler
      *************************************
     */
-
-    /**
-     * Check if it is possible to have channel sounding given the current time limits.
-     *
-     *  \return CS_TX if it is possible to have channel sounding
-     */
-    virtual TxFormat TryChannelSounding();
     /**
      * Check whether channel sounding is enabled. Channel sounding is disabled if channel sounding
      * interval is 0. \return whether channel sounding is enabled.
