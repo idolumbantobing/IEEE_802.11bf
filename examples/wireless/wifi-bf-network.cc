@@ -454,151 +454,7 @@ setLocationScenario(int scenario,
             }
         }
     }
-    else if (scenario == 3)
-    {
-        if (!residentialDensity)
-        {
-            std::vector<std::tuple<double, double, double>> locations_bf = {
-                std::make_tuple(11.5, 3.0, 3.5),
-                std::make_tuple(3.0, 7.5, 3.5),
-                std::make_tuple(12.0, 7.5, 3.5),
-                std::make_tuple(11.5, 4.0, 3.5),
-                std::make_tuple(14.5, 3.5, 3.5),
-                std::make_tuple(14.5, 0.5, 0.5),
-                std::make_tuple(0.5, 5.0, 0.5),
-                std::make_tuple(11.0, 7.5, 0.5),
-            };
-
-            for (int i = 0; i < nBss; i++)
-            {
-                positionAlloc->Add(Vector(std::get<0>(locations_bf[i]),
-                                          std::get<1>(locations_bf[i]),
-                                          std::get<2>(locations_bf[i])));
-            }
-
-            std::vector<std::tuple<double, double, double>> locations_ax = {
-                std::make_tuple(7.0, 7.5, 3.5),
-                std::make_tuple(1.0, 7.5, 3.5),
-                std::make_tuple(3.5, 3.5, 3.5),
-                std::make_tuple(14.5, 6.5, 3.5),
-                std::make_tuple(14.5, 0.5, 3.5),
-                std::make_tuple(4.0, 0.5, 0.5),
-                std::make_tuple(2.0, 4.5, 0.5),
-                std::make_tuple(12.0, 1.5, 0.5),
-                std::make_tuple(1.0, 2.0, 0.5),
-            };
-
-            for (int i = nBfBss; i < nBss; i++)
-            {
-                positionAlloc->Add(Vector(std::get<0>(locations_ax[i]),
-                                          std::get<1>(locations_ax[i]),
-                                          std::get<2>(locations_ax[i])));
-            }
-            return positionAlloc;
-        }
-        else
-        {
-            std::vector<std::tuple<double, double, double>> locations_bf = {
-                std::make_tuple(7.0, 7.5, 3.5),
-                std::make_tuple(1.0, 7.5, 3.5),
-                std::make_tuple(3.5, 3.5, 3.5),
-                std::make_tuple(7.25, 0.5, 3.5),
-                std::make_tuple(14.5, 7.5, 3.5),
-                std::make_tuple(11.5, 7.5, 3.5),
-                std::make_tuple(14.5, 0.5, 3.5),
-                std::make_tuple(3.0, 4.0, 0.5),
-                std::make_tuple(0.5, 5.0, 0.5),
-                std::make_tuple(0.5, 0.5, 0.5),
-                std::make_tuple(14.5, 0.5, 0.5),
-                std::make_tuple(6.5, 0.5, 0.5),
-                std::make_tuple(6.5, 7.5, 0.5),
-                std::make_tuple(11.0, 7.5, 0.5),
-            };
-
-            for (int i = 0; i < nBss; i++)
-            {
-                positionAlloc->Add(Vector(std::get<0>(locations_bf[i]),
-                                          std::get<1>(locations_bf[i]),
-                                          std::get<2>(locations_bf[i])));
-            }
-
-            std::vector<std::tuple<double, double, double>> locations_ax = {
-                std::make_tuple(7.0, 7.5, 3.5),
-                std::make_tuple(1.0, 7.5, 3.5),
-                std::make_tuple(3.5, 3.5, 3.5),
-                std::make_tuple(14.5, 6.5, 3.5),
-                std::make_tuple(14.5, 0.5, 3.5),
-                std::make_tuple(4.0, 0.5, 0.5),
-                std::make_tuple(2.0, 4.5, 0.5),
-                std::make_tuple(12.0, 1.5, 0.5),
-                std::make_tuple(1.0, 2.0, 0.5),
-            };
-
-            for (int i = nBfBss; i < nBss; i++)
-            {
-                positionAlloc->Add(Vector(std::get<0>(locations_ax[i]),
-                                          std::get<1>(locations_ax[i]),
-                                          std::get<2>(locations_ax[i])));
-            }
-            return positionAlloc;
-        }
-    }
-    else if (scenario == 4)
-    {
-        double areaSize = 10.0;
-        double x_baseAp = 0.0;
-        double y_baseAp = 0.0;
-        double baseAngle = 0.0;
-        double rasioAngle = 0.0;
-
-        baseAngle = 2.0 * M_PI / nBss;
-        if (multipleBss)
-        {
-            rasioAngle = 1 / (sin(baseAngle / 2));
-            rasioAngle = 3;
-        }
-        std::cout << "rasioAngle: " << rasioAngle << std::endl;
-
-        for (int i = 0; i < nBss; i++)
-        {
-            // Randomly place AP
-            x_baseAp = getRandomCoordinate(-areaSize, areaSize);
-            y_baseAp = getRandomCoordinate(-areaSize, areaSize);
-            if (i < nBfBss)
-            {
-                std::cout << "(bf)AP: " << x_baseAp << ", " << y_baseAp << std::endl;
-            }
-            else
-            {
-                std::cout << "(ax)AP: " << x_baseAp << ", " << y_baseAp << std::endl;
-            }
-            positionAlloc->Add(Vector(x_baseAp, y_baseAp, 0.0));
-
-            if (i < nBfBss)
-            {
-                for (uint32_t j = 0; j < allBss[i].nStations_sensing; j++)
-                {
-                    // Randomly place STA within the area
-                    double x = getRandomCoordinate(-areaSize, areaSize);
-                    double y = getRandomCoordinate(-areaSize, areaSize);
-                    std::cout << "(bf)STA: " << x << ", " << y << std::endl;
-                    positionAlloc->Add(Vector(x, y, 0.0));
-                }
-            }
-            else
-            {
-                for (uint32_t j = 0; j < allBss[i].nStations_no_sensing; j++)
-                {
-                    // Randomly place STA within the area
-                    double x = getRandomCoordinate(-areaSize, areaSize);
-                    double y = getRandomCoordinate(-areaSize, areaSize);
-                    std::cout << "(ax)STA: " << x << ", " << y << std::endl;
-                    positionAlloc->Add(Vector(x, y, 0.0));
-                }
-            }
-        }
-    }
-    else if (scenario == 5)
+    else if (scenario == 2)
     {
         double areaSize = 5.0;
         // The lower row
@@ -725,7 +581,7 @@ setLocationScenario(int scenario,
 std::vector<Bss>
 setNumberDevice(int scenario)
 {
-    if (scenario == 1 || scenario == 4)
+    if (scenario == 1)
     {
         if (nBss == 1 && nAxBss == 0)
         {
@@ -891,148 +747,7 @@ setNumberDevice(int scenario)
         }
         return allBss_sce2;
     }
-    else if (scenario == 3)
-    {
-        if (!residentialDensity)
-        {
-            nBss = 4;
-            nBfBss = 2;
-            nAxBss = nBss - nBfBss;
-            std::vector<Bss> allBss_sce3;
-            allBss_sce3.push_back({4, 0, 1});
-            allBss_sce3.push_back({2, 0, 1});
-            allBss_sce3.push_back({0, 4, 1});
-            allBss_sce3.push_back({0, 3, 1});
-            for (int i = 0; i < nBfBss; i++)
-            {
-                char address_tempconst[18];
-                std::snprintf(address_tempconst,
-                              sizeof(address_tempconst),
-                              "00:00:00:00:00:%02x",
-                              i + 1);
-                Mac48Address address = Mac48Address(address_tempconst);
-                Calculation calc;
-                calc.m_avgTrueLatency = Seconds(0);
-                calc.m_sumTrueLatency = Seconds(0);
-                calc.m_innerCounter = 0;
-                calc.m_collisionCounter = 0;
-                calc.stillSensing = false;
-                allCalculation.insert({address, calc});
-            }
-
-            int j = 0;
-            for (int i = nBfBss; i < nBss; i++)
-            {
-                char address_tempconst[18];
-                j = i + nStations * nBfBss;
-                std::snprintf(address_tempconst,
-                              sizeof(address_tempconst),
-                              "00:00:00:00:00:%02x",
-                              j + 1);
-                Mac48Address address = Mac48Address(address_tempconst);
-                Calculation calc;
-                calc.m_avgTrueLatency = Seconds(0);
-                calc.m_sumTrueLatency = Seconds(0);
-                calc.m_innerCounter = 0;
-                calc.m_collisionCounter = 0;
-                calc.stillSensing = false;
-                allCalculation_net2.insert({address, calc});
-            }
-
-            for (int i = 0; i < nBfBss; i++)
-            {
-                NodeContainer wifiStaNode, wifiApNode;
-                wifiStaNode.Create(allBss_sce3[i].nStations_sensing);
-                wifiApNode.Create(allBss_sce3[i].nAp);
-                std::cout << i + 1 << ". BSS(bf) " << "has " << allBss_sce3[i].nStations_sensing
-                          << " stations " << "and " << allBss_sce3[i].nAp << " AP" << std::endl;
-                allBss_sce3[i].wifiStaNode = wifiStaNode;
-                allBss_sce3[i].wifiApNode = wifiApNode;
-            }
-            for (int i = nBfBss; i < nBss; i++)
-            {
-                NodeContainer wifiStaNode_net2, WifiApNode_net2;
-                wifiStaNode_net2.Create(allBss_sce3[i].nStations_no_sensing);
-                WifiApNode_net2.Create(allBss_sce3[i].nAp);
-                std::cout << i + 1 << ". BSS(ax) " << "has " << allBss_sce3[i].nStations_no_sensing
-                          << " stations " << "and " << allBss_sce3[i].nAp << " AP" << std::endl;
-                allBss_sce3[i].wifiStaNode_net2 = wifiStaNode_net2;
-                allBss_sce3[i].WifiApNode_net2 = WifiApNode_net2;
-            }
-            return allBss_sce3;
-        }
-        else
-        {
-            nBss = 6;
-            nBfBss = 4;
-            nAxBss = nBss - nBfBss;
-            std::vector<Bss> allBss_sce3;
-            allBss_sce3.push_back({3, 0, 1});
-            allBss_sce3.push_back({2, 0, 1});
-            allBss_sce3.push_back({2, 0, 1});
-            allBss_sce3.push_back({3, 0, 1});
-            allBss_sce3.push_back({0, 4, 1});
-            allBss_sce3.push_back({0, 3, 1});
-            for (int i = 0; i < nBfBss; i++)
-            {
-                char address_tempconst[18];
-                std::snprintf(address_tempconst,
-                              sizeof(address_tempconst),
-                              "00:00:00:00:00:%02x",
-                              i + 1);
-                Mac48Address address = Mac48Address(address_tempconst);
-                Calculation calc;
-                calc.m_avgTrueLatency = Seconds(0);
-                calc.m_sumTrueLatency = Seconds(0);
-                calc.m_innerCounter = 0;
-                calc.m_collisionCounter = 0;
-                calc.stillSensing = false;
-                allCalculation.insert({address, calc});
-            }
-
-            int j = 0;
-            for (int i = nBfBss; i < nBss; i++)
-            {
-                char address_tempconst[18];
-                j = i + nStations * nBfBss;
-                std::snprintf(address_tempconst,
-                              sizeof(address_tempconst),
-                              "00:00:00:00:00:%02x",
-                              j + 1);
-                Mac48Address address = Mac48Address(address_tempconst);
-                Calculation calc;
-                calc.m_avgTrueLatency = Seconds(0);
-                calc.m_sumTrueLatency = Seconds(0);
-                calc.m_innerCounter = 0;
-                calc.m_collisionCounter = 0;
-                calc.stillSensing = false;
-                allCalculation_net2.insert({address, calc});
-            }
-
-            for (int i = 0; i < nBfBss; i++)
-            {
-                NodeContainer wifiStaNode, wifiApNode;
-                wifiStaNode.Create(allBss_sce3[i].nStations_sensing);
-                wifiApNode.Create(allBss_sce3[i].nAp);
-                std::cout << i + 1 << ". BSS(bf) " << "has " << allBss_sce3[i].nStations_sensing
-                          << " stations " << "and " << allBss_sce3[i].nAp << " AP" << std::endl;
-                allBss_sce3[i].wifiStaNode = wifiStaNode;
-                allBss_sce3[i].wifiApNode = wifiApNode;
-            }
-            for (int i = nBfBss; i < nBss; i++)
-            {
-                NodeContainer wifiStaNode_net2, WifiApNode_net2;
-                wifiStaNode_net2.Create(allBss_sce3[i].nStations_no_sensing);
-                WifiApNode_net2.Create(allBss_sce3[i].nAp);
-                std::cout << i + 1 << ". BSS(ax) " << "has " << allBss_sce3[i].nStations_no_sensing
-                          << " stations " << "and " << allBss_sce3[i].nAp << " AP" << std::endl;
-                allBss_sce3[i].wifiStaNode_net2 = wifiStaNode_net2;
-                allBss_sce3[i].WifiApNode_net2 = WifiApNode_net2;
-            }
-            return allBss_sce3;
-        }
-    }
-    else if (scenario == 5)
+    else if (scenario == 2)
     {
         multipleBss = true;
         nBss = 12;
@@ -1296,7 +1011,7 @@ main(int argc, char* argv[])
 
     Ptr<MultiModelSpectrumChannel> spectrumChannel = CreateObject<MultiModelSpectrumChannel>();
 
-    if (scenario == 3)
+    if (scenario == 2)
     {
         Ptr<ThreeGppIndoorOfficePropagationLossModel> ThreeGppLossModel =
             CreateObject<ThreeGppIndoorOfficePropagationLossModel>();
@@ -1305,10 +1020,6 @@ main(int argc, char* argv[])
     }
     else
     {
-        // Ptr<LogDistancePropagationLossModel> lossModel =
-        //     CreateObject<LogDistancePropagationLossModel>();
-        // spectrumChannel->AddPropagationLossModel(lossModel);
-
         Ptr<FriisPropagationLossModel> lossModel = CreateObject<FriisPropagationLossModel>();
         lossModel->SetFrequency(5.180e9);
         spectrumChannel->AddPropagationLossModel(lossModel);
@@ -1354,7 +1065,7 @@ main(int argc, char* argv[])
                          "MaxNc",
                          UintegerValue(nc - 1));
 
-    if (scenario == 5)
+    if (scenario == 2)
     {
         for (int i = 0; i < 12; i++)
         {
@@ -1464,7 +1175,7 @@ main(int argc, char* argv[])
                         UintegerValue(
                             0)); // Enable A-MSDU with the highest maximum size (in Bytes) allowed
                 }
-                
+
                 allBss[i].staDevices_net2 =
                     wifi.Install(phy, macSta_net2, allBss[i].wifiStaNode_net2);
             }
@@ -1599,7 +1310,7 @@ main(int argc, char* argv[])
 
     mobility.SetPositionAllocator(positionAlloc);
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    if (scenario == 5)
+    if (scenario == 2)
     {
         for (int i = 0; i < 12; i++)
         {
@@ -1634,7 +1345,7 @@ main(int argc, char* argv[])
 
     /* Internet Stack */
     InternetStackHelper stack;
-    if (scenario == 5)
+    if (scenario == 2)
     {
         for (int i = 0; i < 12; i++)
         {
@@ -1669,7 +1380,7 @@ main(int argc, char* argv[])
 
     Ipv4AddressHelper address;
     address.SetBase("192.168.1.0", "255.255.255.0");
-    if (scenario == 5)
+    if (scenario == 2)
     {
         for (int i = 0; i < 12; i++)
         {
@@ -1706,7 +1417,7 @@ main(int argc, char* argv[])
         }
     }
 
-    if (scenario == 5)
+    if (scenario == 2)
     {
         for (int i = 0; i < 12; i++)
         {
@@ -1753,36 +1464,18 @@ main(int argc, char* argv[])
                 staWifiMac->SetBssid(apWifiMac->GetAddress(), 0U);
             }
         }
-        if (scenario == 3)
+
+        for (int i = nBfBss; i < nBss; i++)
         {
-            for (int i = nBfBss; i < nBss; i++)
+            Ptr<WifiNetDevice> AP_net_device =
+                DynamicCast<ns3::WifiNetDevice>(allBss[i].apDevice_net2.Get(0));
+            auto apWifiMac = StaticCast<ApWifiMac>(AP_net_device->GetMac());
+            for (uint32_t j = 0; j < allBss[i].nStations_no_sensing; j++)
             {
-                Ptr<WifiNetDevice> AP_net_device =
-                    DynamicCast<ns3::WifiNetDevice>(allBss[i].apDevice_net2.Get(0));
-                auto apWifiMac = StaticCast<ApWifiMac>(AP_net_device->GetMac());
-                for (uint32_t j = 0; j < allBss[i].nStations_no_sensing; j++)
-                {
-                    Ptr<WifiNetDevice> STA_net_device =
-                        DynamicCast<ns3::WifiNetDevice>(allBss[i].staDevices_net2.Get(j));
-                    auto staWifiMac = StaticCast<StaWifiMac>(STA_net_device->GetMac());
-                    staWifiMac->SetBssid(apWifiMac->GetAddress(), 0U);
-                }
-            }
-        }
-        else
-        {
-            for (int i = nBfBss; i < nBss; i++)
-            {
-                Ptr<WifiNetDevice> AP_net_device =
-                    DynamicCast<ns3::WifiNetDevice>(allBss[i].apDevice_net2.Get(0));
-                auto apWifiMac = StaticCast<ApWifiMac>(AP_net_device->GetMac());
-                for (uint32_t j = 0; j < allBss[i].nStations_no_sensing; j++)
-                {
-                    Ptr<WifiNetDevice> STA_net_device =
-                        DynamicCast<ns3::WifiNetDevice>(allBss[i].staDevices_net2.Get(j));
-                    auto staWifiMac = StaticCast<StaWifiMac>(STA_net_device->GetMac());
-                    staWifiMac->SetBssid(apWifiMac->GetAddress(), 0U);
-                }
+                Ptr<WifiNetDevice> STA_net_device =
+                    DynamicCast<ns3::WifiNetDevice>(allBss[i].staDevices_net2.Get(j));
+                auto staWifiMac = StaticCast<StaWifiMac>(STA_net_device->GetMac());
+                staWifiMac->SetBssid(apWifiMac->GetAddress(), 0U);
             }
         }
     }
@@ -1790,7 +1483,7 @@ main(int argc, char* argv[])
     ApplicationContainer serverApplications, clientApplications;
     ApplicationContainer serverApplications_net2, clientApplications_net2;
 
-    if (scenario == 5)
+    if (scenario == 2)
     {
         for (int i = 0; i < 12; i++)
         {

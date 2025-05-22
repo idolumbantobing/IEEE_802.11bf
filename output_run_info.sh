@@ -353,7 +353,7 @@ if [ "$option" == "multipleBssBfIntervalOffice" ]; then
 
             # Run each iteration in the background for parallel processing
             (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=5 --nBfBss=6 --simulationTime=60.0 --sensingInterval=$Interval --seed=$s" --no-build >/$Save_loc/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"//nolog_multipleBss_seed=$s.out 2>&1
+                ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=2 --nBfBss=6 --simulationTime=60.0 --sensingInterval=$Interval --seed=$s" --no-build >/$Save_loc/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"//nolog_multipleBss_seed=$s.out 2>&1
             ) &
 
             ((counter++))
