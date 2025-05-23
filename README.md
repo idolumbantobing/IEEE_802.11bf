@@ -40,31 +40,17 @@ If you use this module in your research, please cite following:
 
 
 ```bibtex8
-@MASTERSTHESIS{Lumbantobing:998149,
-      author       = {Lumbantobing, Ido Manuel},
-      othercontributors = {Petrova, Marina and Simic, Ljiljana and Keshtiarast, Navid
-                          and Bishoyi, Pradyumna Kumar},
-      title        = {{I}mplementation and evaluation of {IEEE} 802.11bf {MAC} in
-                      ns-3},
-      school       = {Rheinisch-Westfälische Technische Hochschule Aachen},
-      type         = {Bachelorarbeit},
-      address      = {Aachen},
-      publisher    = {RWTH Aachen University},
-      reportid     = {RWTH-2024-11170},
-      pages        = {1 Online-Ressource: Illustrationen},
-      year         = {2024},
-      note         = {Veröffentlicht auf dem Publikationsserver der RWTH Aachen
-                      University; Bachelorarbeit, Rheinisch-Westfälische
-                      Technische Hochschule Aachen, 2024},
-      cin          = {615720},
-      ddc          = {621.3},
-      cid          = {$I:(DE-82)615720_20201104$},
-      typ          = {PUB:(DE-HGF)2},
-      doi          = {10.18154/RWTH-2024-11170},
-      url          = {https://publications.rwth-aachen.de/record/998149},
+@misc{keshtiarast2025nextgensensingmeetslegacy,
+      title={When Next-Gen Sensing Meets Legacy Wi-Fi: Performance Analyses of IEEE 802.11bf and IEEE 802.11ax Coexistence}, 
+      author={Navid Keshtiarast and Pradyumna Kumar Bishoyi and Ido Manuel Lumbantobing and Marina Petrova},
+      year={2025},
+      eprint={2503.04637},
+      archivePrefix={arXiv},
+      primaryClass={cs.NI},
+      url={https://arxiv.org/abs/2503.04637}, 
 }
 ```
-
+N. Keshtiarast, P. K. Bishoyi, I. M. Lumbantobing, and M. Petrova, “When Sensing Meets Communication: Coexistence analysis of IEEE 802.11bf and IEEE 802.11ax,” (Accepted for Publication in IEEE ICC 2025).
 
 </details>
 
