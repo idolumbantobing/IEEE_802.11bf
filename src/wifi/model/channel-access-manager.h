@@ -308,32 +308,21 @@ class ChannelAccessManager : public Object
 
     /*
     *************************************
-    Attempt to add IEEE 802.11bf support
-    Public Functions and Attributes for Channel Access Manager
+    Implementation of IEEE 802.11bf related support
+    Public functions and attributes for ChannelAccessManager
     *************************************
     */
 
     /**
-     * Return the most recent time.
-     *
-     * \param list the initializer list including the times to compare
-     *
-     * \return the most recent time
+     * \return set the PCF supported flag
      */
-    Time MostRecent(std::initializer_list<Time> list) const;
-    bool m_pcfSupported; //!< whether PCF is supported
     void setPcfSupported(bool pcfSupported);
+    bool m_pcfSupported;                          //!< whether PCF is supported
+
 
   protected:
     void DoInitialize() override;
     void DoDispose() override;
-
-    /*
-    *************************************
-    Attempt to add IEEE 802.11bf support
-    Protected Functions and Attributes for Channel Access Manager
-    *************************************
-    */
 
   private:
     /**
@@ -465,26 +454,6 @@ class ChannelAccessManager : public Object
     Ptr<WifiPhy> m_phy;                    //!< pointer to the unique active PHY
     Ptr<FrameExchangeManager> m_feManager; //!< pointer to the Frame Exchange Manager
     uint8_t m_linkId;                      //!< the ID of the link this object is associated with
-
-    /*
-    *************************************
-    Attempt to add IEEE 802.11bf support
-    Private Functions and Attributes for Channel Access Manager
-    *************************************
-    */
-    /**
-     * Grant access to Txop using PCF preemption
-     *
-     * \param txop the Txop
-     */
-    void DoGrantPcfAccess(Ptr<Txop> txop);
-    /**
-     * Start NAV with the given duration.
-     *
-     * \param duration the duration
-     * \return true if NAV is reset
-     */
-    bool DoNavStartNowPCF(Time duration);
 };
 
 } // namespace ns3

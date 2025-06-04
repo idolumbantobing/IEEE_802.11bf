@@ -424,8 +424,8 @@ class Txop : public Object
 
     /*
     *************************************
-    Changes to add support for IEEE 802.11bf
-    Public Functions and Attributes for Txop
+    Implementation of IEEE 802.11bf related support
+    Public functions and attributes for Txop
     *************************************
     */
     /**
@@ -451,7 +451,6 @@ class Txop : public Object
      * Notify the Txop that access has been granted.
      */
     virtual void NotifyAccessGranted(uint8_t linkId);
-
     /**
      * Return the remaining duration in the current TXOP.
      * \return the remaining duration in the current TXOP.
@@ -472,12 +471,6 @@ class Txop : public Object
      * packet transmission was failed.
      */
     typedef Callback<void, WifiMacDropReason, Ptr<const WifiMpdu>> TxFailed;
-    /**
-     * typedef for a callback to invoke when a
-     * packet is dropped.
-     */
-    typedef Callback<void, Ptr<const Packet>> TxDropped;
-
     /**
      * \param callback the callback to invoke when a
      * packet transmission was completed successfully.
@@ -617,17 +610,16 @@ class Txop : public Object
 
     /*
     *************************************
-    Changes to add support for IEEE 802.11bf
-    Protected Functions and Attributes for Txop
+    Implementation of IEEE 802.11bf related support
+    Protected functions and attributes for Txop
     *************************************
     */
-    Ptr<InfrastructureWifiMac> m_inf;  //!< the MacLow
+    Ptr<InfrastructureWifiMac> m_inf;  //!< the InfrastructureWifiMac associated with this Txop
     Ptr<const Packet> m_currentPacket; //!< the current packet
     WifiMacHeader m_currentHdr;        //!< the current header
-    uint32_t lastCw;                    //!< the last CW value
+    uint32_t m_lastCw;                    //!< the last CW value
     TxOk m_txOkCallback;               //!< the transmit OK callback
     TxFailed m_txFailedCallback;       //!< the transmit failed callback
-    TxDropped m_txDroppedCallback;     //!< the packet dropped callback
 
   private:
     /**

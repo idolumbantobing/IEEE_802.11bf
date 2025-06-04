@@ -656,16 +656,9 @@ Txop::GenerateBackoff(uint8_t linkId)
 {
     NS_LOG_FUNCTION(this << +linkId);
     uint32_t backoff = m_rng->GetInteger(0, GetCw(linkId));
-    // if (m_inf && m_inf->GetPcfSupported() && lastCw == GetMaxCw(linkId))
-    // {
-    //     backoff = m_rng->GetInteger((uint32_t)((double)GetCw(linkId)*0.5), GetCw(linkId));
-    // }else
-    // {
-    //     backoff = m_rng->GetInteger(0, GetCw(linkId));
-    // }
     m_backoffTrace(backoff, linkId);
     StartBackoffNow(backoff, linkId);
-    lastCw = GetCw(linkId);
+    m_lastCw = GetCw(linkId);
 }
 
 void

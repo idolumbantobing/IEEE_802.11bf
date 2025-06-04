@@ -484,11 +484,6 @@ ChannelAccessManager::RequestAccess(Ptr<Txop> txop, bool IsCfPeriod)
         txop->UpdateBackoffSlotsNow(0, accessGrantStart + (nIntSlots * GetSlot()), m_linkId);
     }
 
-    // if (!m_pcfSupported)
-    // {
-    //     m_phy->NotifyMonitorChannelAccess(txop->m_mac->GetAddress(), Simulator::Now(), false);
-    // }
-
     UpdateBackoff();
     NS_ASSERT(txop->GetAccessStatus(m_linkId) != Txop::REQUESTED);
     txop->NotifyAccessRequested(m_linkId);
@@ -1147,61 +1142,13 @@ ChannelAccessManager::UpdateLastIdlePeriod()
     }
 }
 
-/*
-*************************************
-Attempt to add PCF from ns3.33
-Public Functions and Attributes for Channel Access Manager
-*************************************
-*/
-
-Time
-ChannelAccessManager::MostRecent(std::initializer_list<Time> list) const
-{
-    NS_ASSERT(list.size() > 0);
-    return *std::max_element(list.begin(), list.end());
-}
 
 void
 ChannelAccessManager::setPcfSupported(bool pcfSupported)
 {
+    // Maybe for future use, but currently unused
+    NS_LOG_FUNCTION(this << pcfSupported);
     m_pcfSupported = pcfSupported;
-}
-
-/*
-*************************************
-Attempt to add PCF from ns3.33
-Protected Functions and Attributes for Channel Access Manager
-*************************************
-*/
-
-/*
-*************************************
-Attempt to add PCF from ns3.33
-Private Functions and Attributes for Channel Access Manager
-*************************************
-*/
-
-void
-ChannelAccessManager::DoGrantPcfAccess(Ptr<Txop> txop)
-{
-    NS_LOG_INFO(Simulator::Now() << " Channel access granted for PCF: "
-                                 << txop->m_mac->GetAddress());
-    NS_LOG_FUNCTION(this << txop);
-    // NS_LOG_DEBUG("pcf access granted");
-    // txop->NotifyAccessGranted(m_linkId);
-}
-
-bool
-ChannelAccessManager::DoNavStartNowPCF(Time duration)
-{
-    NotifyNavStartNow(duration);
-    Time newNavEnd = Simulator::Now() + duration;
-    if (newNavEnd > m_lastNavEnd)
-    {
-        m_lastNavEnd = newNavEnd;
-        return true;
-    }
-    return false;
 }
 
 } // namespace ns3
