@@ -145,28 +145,17 @@ ApWifiMac::ApWifiMac()
     NS_LOG_FUNCTION(this);
     m_beaconTxop = CreateObject<Txop>(CreateObject<WifiMacQueue>(AC_BEACON));
     m_beaconTxop->SetTxMiddle(m_txMiddle);
-
-    // ***** attempt to add PCF from ns3.33 *****
-
     m_beaconTxop->SetTxOkCallback(MakeCallback(&ApWifiMac::TxOk, this));
     m_txop->SetTxFailedCallback(MakeCallback(&ApWifiMac::TxFailed, this));
     m_txop->SetTxOkCallback(MakeCallback(&ApWifiMac::TxOk, this));
 
     // Let the lower layers know that we are acting as an AP.
     SetTypeOfStation(AP);
-    m_itCfPollingList = m_cfPollingList.begin();
 }
 
 ApWifiMac::~ApWifiMac()
 {
     NS_LOG_FUNCTION(this);
-    // ***** attempt to add PCF from ns3.33 *****
-    m_staList.clear();
-    m_nonErpStations.clear();
-    m_nonHtStations.clear();
-    m_cfPollingList.clear();
-    // ***** attempt to add Channel Sounding from ns3.37 *****
-    m_csStaIdList.clear();
 }
 
 void
@@ -176,7 +165,6 @@ ApWifiMac::DoDispose()
     m_beaconTxop->Dispose();
     m_beaconTxop = nullptr;
     m_enableBeaconGeneration = false;
-    // ***** changes for attempt to add PCF from ns3.33 *****
     m_beaconEvent.Cancel();
     m_cfpEvent.Cancel();
     WifiMac::DoDispose();
@@ -429,9 +417,9 @@ ApWifiMac::ForwardDown(Ptr<Packet> packet, Mac48Address from, Mac48Address to, u
             NS_ASSERT(tid < 8);
             if (GetPcfSupported())
             {
-                if (!m_SensingAppBegin)
+                if (!m_sensingAppBegin)
                 {
-                    m_SensingAppBegin = true;
+                    m_sensingAppBegin = true;
                     SendOneBeacon(0U);
                 }
             }
@@ -1500,21 +1488,19 @@ ApWifiMac::SendOneBeacon(uint8_t linkId)
     else
     {
         // Resetting the TXOP in case last transmission was failed
-        GetQosTxop(AcIndex(m_SensingPriority))->ResetCw(linkId);
-        Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_SensingPriority))->PeekNextMpdu(linkId);
+        GetQosTxop(AcIndex(m_sensingPriority))->ResetCw(linkId);
+        Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_sensingPriority))->PeekNextMpdu(linkId);
         if (lastMpdu)
         {
-            GetQosTxop(AcIndex(m_SensingPriority))->GetWifiMacQueue()->DequeueIfQueued({lastMpdu});
+            GetQosTxop(AcIndex(m_sensingPriority))->GetWifiMacQueue()->DequeueIfQueued({lastMpdu});
         }
         StopCfPeriod();
 
-        if (m_SensingAppBegin)
+        if (m_sensingAppBegin)
         {
-            // std::cout << "Sensing start from : " << GetAddress() << " " << Simulator::Now()
-            //           << std::endl;
             GetWifiPhy()->NotifyMonitorChannelAccess(GetAddress(), Simulator::Now(), false);
             StartCfPeriod();
-            GetQosTxop(AcIndex(m_SensingPriority))
+            GetQosTxop(AcIndex(m_sensingPriority))
                 ->SetTxOkCallback(MakeCallback(&ApWifiMac::TxOk, this));
 
             if (GetPcfSupported())
@@ -1522,9 +1508,9 @@ ApWifiMac::SendOneBeacon(uint8_t linkId)
                 if (GetQosSupported())
                 {
                     // Use the standard queue for the beacon
-                    GetQosTxop(AcIndex(m_SensingPriority))->SetInfMac(this);
-                    SetTxop(GetQosTxop(AcIndex(m_SensingPriority)));
-                    GetQosTxop(AcIndex(m_SensingPriority))->Queue(packet, hdr);
+                    GetQosTxop(AcIndex(m_sensingPriority))->SetInfMac(this);
+                    SetTxop(GetQosTxop(AcIndex(m_sensingPriority)));
+                    GetQosTxop(AcIndex(m_sensingPriority))->Queue(packet, hdr);
                 }
                 else
                 {
@@ -1534,10 +1520,6 @@ ApWifiMac::SendOneBeacon(uint8_t linkId)
                 }
             }
             Simulator::Schedule(GetSensingInterval(), &ApWifiMac::SendOneBeacon, this, 0U);
-            // Simulator::Schedule(GetCfpMaxDuration()/2 - GetWifiPhy(0U)->GetPifs(),
-            //                     &ApWifiMac::EndSensing,
-            //                     this,
-            //                     0U);
         }
         else
         {
@@ -1611,7 +1593,7 @@ ApWifiMac::TxOk(Ptr<const WifiMpdu> mpdu)
             ApplyTidLinkMapping(*staMldAddress, WifiDirection::DOWNLINK);
         }
     }
-    else if (hdr.IsBeacon() && GetPcfSupported() && m_SensingAppBegin)
+    else if (hdr.IsBeacon() && GetPcfSupported() && m_sensingAppBegin)
     {
         StartCfPeriod();
         Simulator::Schedule(GetWifiPhy()->GetSifs(), &ApWifiMac::StartSensing, this, 0U);
@@ -1620,7 +1602,7 @@ ApWifiMac::TxOk(Ptr<const WifiMpdu> mpdu)
     {
         if (GetQosSupported())
         {
-            GetQosTxop(AcIndex(m_SensingPriority))->EndTxNoAck(0U, mpdu, false);
+            GetQosTxop(AcIndex(m_sensingPriority))->EndTxNoAck(0U, mpdu, false);
         }
         else
         {
@@ -1630,17 +1612,13 @@ ApWifiMac::TxOk(Ptr<const WifiMpdu> mpdu)
         {
             if (GetQosSupported())
             {
-                GetQosTxop(AcIndex(m_SensingPriority))->NotifyChannelReleased(0U);
+                GetQosTxop(AcIndex(m_sensingPriority))->NotifyChannelReleased(0U);
             }
             else
             {
                 m_txop->NotifyChannelReleased(0U);
             }
         }
-    }
-    else if (hdr.IsCfPoll())
-    {
-        IncrementPollingListIterator();
     }
     else if (hdr.IsAction())
     {
@@ -1703,20 +1681,18 @@ ApWifiMac::TxFailed(WifiMacDropReason timeoutReason, Ptr<const WifiMpdu> mpdu)
     else if (hdr.IsCfPoll())
     {
         SensingRetransmission(0U);
-        // IncrementPollingListIterator();
-        // SendNextCfFrame(0U);
     }
     else if (hdr.IsBeacon())
     {
         if (GetPcfSupported())
         {
-            NS_ASSERT_MSG(m_SensingAppBegin, "Sensing not started");
+            NS_ASSERT_MSG(m_sensingAppBegin, "Sensing not started");
             std::cout << "Beacon failed! from : " << GetAddress() << " " << Simulator::Now()
                       << std::endl;
-            Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_SensingPriority))->PeekNextMpdu(0U);
+            Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_sensingPriority))->PeekNextMpdu(0U);
             if (lastMpdu)
             {
-                GetQosTxop(AcIndex(m_SensingPriority))
+                GetQosTxop(AcIndex(m_sensingPriority))
                     ->GetWifiMacQueue()
                     ->DequeueIfQueued({lastMpdu});
             }
@@ -1808,18 +1784,18 @@ ApWifiMac::TxFailed(WifiMacDropReason timeoutReason, Ptr<const WifiMpdu> mpdu)
             }
             packet->AddHeader(beacon);
 
-            GetQosTxop(AcIndex(m_SensingPriority))->UpdateFailedCw(0U);
+            GetQosTxop(AcIndex(m_sensingPriority))->UpdateFailedCw(0U);
             StartCfPeriod();
-            GetQosTxop(AcIndex(m_SensingPriority))
+            GetQosTxop(AcIndex(m_sensingPriority))
                 ->SetTxOkCallback(MakeCallback(&ApWifiMac::TxOk, this));
             if (GetPcfSupported())
             {
                 if (GetQosSupported())
                 {
                     // Use the standard queue for the beacon
-                    GetQosTxop(AcIndex(m_SensingPriority))->SetInfMac(this);
-                    SetTxop(GetQosTxop(AcIndex(m_SensingPriority)));
-                    GetQosTxop(AcIndex(m_SensingPriority))->Queue(packet, hdr);
+                    GetQosTxop(AcIndex(m_sensingPriority))->SetInfMac(this);
+                    SetTxop(GetQosTxop(AcIndex(m_sensingPriority)));
+                    GetQosTxop(AcIndex(m_sensingPriority))->Queue(packet, hdr);
                 }
                 else
                 {
@@ -1926,29 +1902,7 @@ ApWifiMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
 
     if (hdr->IsBeacon() && Simulator::Now() > Seconds(1))
     {
-        // std::cout << "Beacon received from " << from << " " << Simulator::Now() << std::endl;
-        // MgtBeaconHeader beacon;
-        // mpdu->GetPacket()->PeekHeader(beacon);
-        // CfParameterSet cfParameterSet = beacon.GetCfParameterSet();
-        // if (cfParameterSet.GetCFPMaxDurationUs() > 0)
-        // {
-        //     std::cout << "Beacon received from " << from << " " << Simulator::Now() << std::endl;
-        // }
-
-        // // see section 9.3.2.2 802.11-1999
-        // if (GetPcfSupported())
-        // {
-        //     GetChannelAccessManager(linkId)->NotifyNavStartNow(
-        //         MicroSeconds(cfParameterSet.GetCFPMaxDurationUs()));
-        // }
-        // else
-        // {
-        //     GetChannelAccessManager(linkId)->NotifyNavStartNow(
-        //         MicroSeconds(cfParameterSet.GetCFPMaxDurationUs()));
-        // }
-        // Simulator::Schedule(MicroSeconds(cfParameterSet.GetCFPMaxDurationUs()),
-        //                     &ApWifiMac::EndSensing,
-        //                     this, linkId);
+        
     }
 
     if (hdr->IsData())
@@ -2083,17 +2037,6 @@ ApWifiMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
                 {
                     ParseReportedStaInfo(frame, from, linkId);
                 }
-                // Attempt to implement PCF
-                if (GetPcfSupported())
-                {
-                    m_cfPollingList.push_back(from);
-                    if (m_itCfPollingList == m_cfPollingList.end())
-                    {
-                        // For now it is assumed that the first station in the list is
-                        // the one to be polled
-                        IncrementPollingListIterator();
-                    }
-                }
                 SendAssocResp(hdr->GetAddr2(), hdr->IsReassocReq(), linkId);
 
                 return;
@@ -2120,16 +2063,6 @@ ApWifiMac::Receive(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
                         UpdateShortSlotTimeEnabled(linkId);
                         UpdateShortPreambleEnabled(linkId);
                         StaSwitchingToActiveModeOrDeassociated(from, linkId);
-                        break;
-                    }
-                }
-                for (std::list<Mac48Address>::const_iterator j = m_cfPollingList.begin();
-                     j != m_cfPollingList.end();
-                     ++j)
-                {
-                    if ((*j) == from)
-                    {
-                        m_cfPollingList.erase(j);
                         break;
                     }
                 }
@@ -2754,12 +2687,6 @@ ApWifiMac::GetMaxBufferStatus(Mac48Address address) const
     return 255;
 }
 
-/*
-    *************************************
-    Attempt to add PCF from ns3.33
-    Public Functions for Ap Wifi Mac
-    *************************************
-*/
 
 void
 ApWifiMac::SetCfpMaxDuration(Time duration)
@@ -2769,8 +2696,6 @@ ApWifiMac::SetCfpMaxDuration(Time duration)
     {
         NS_LOG_WARN("CFP max duration should be multiple of 1024us (802.11 time unit)");
     }
-    // to be discussed wheter cfp duration in txop or mac
-    // Note : to be investigated because logic of wheter CFPMaxDuration in TXOP or MAC Inf
     InfrastructureWifiMac::SetCfpMaxDuration(duration);
 }
 
@@ -2793,13 +2718,6 @@ ApWifiMac::GetPcfSupported() const
 {
     return m_WiFiSensingSupported;
 }
-
-/*
-    *************************************
-    Attempt to add PCF from ns3.33
-    Private Functions for Ap Wifi Mac
-    *************************************
-*/
 
 void
 ApWifiMac::SendNextCfFrame(uint8_t linkId)
@@ -2831,8 +2749,8 @@ ApWifiMac::StartSensing(uint8_t linkId)
     NS_LOG_FUNCTION(this);
     NS_ASSERT(GetPcfSupported() && GetQosSupported());
 
-    GetQosTxop(AcIndex(m_SensingPriority))->SetInfMac(this);
-    GetQosTxop(AcIndex(m_SensingPriority))
+    GetQosTxop(AcIndex(m_sensingPriority))->SetInfMac(this);
+    GetQosTxop(AcIndex(m_sensingPriority))
         ->SendCfFrame(WIFI_MAC_QOSDATA_CFPOLL, Mac48Address::GetBroadcast(), 0U);
 }
 
@@ -2841,18 +2759,16 @@ ApWifiMac::SensingRetransmission(uint8_t linkId)
 {
     NS_LOG_FUNCTION(this);
     NS_ASSERT(GetPcfSupported() && GetQosSupported());
-    // std::cout << "Collision occurs in transmission by : " << GetAddress() << " " <<
-    // Simulator::Now()
-    //           << std::endl;
+
     if (GetRemainingCfpDuration().IsPositive())
     {
-        GetQosTxop(AcIndex(m_SensingPriority))->UpdateFailedCw(linkId);
-        GetQosTxop(AcIndex(m_SensingPriority))
+        GetQosTxop(AcIndex(m_sensingPriority))->UpdateFailedCw(linkId);
+        GetQosTxop(AcIndex(m_sensingPriority))
             ->NotifyChannelReleasedForPcf(linkId, true, Seconds(0));
-        Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_SensingPriority))->PeekNextMpdu(linkId);
+        Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_sensingPriority))->PeekNextMpdu(linkId);
         if (lastMpdu)
         {
-            GetQosTxop(AcIndex(m_SensingPriority))->GetWifiMacQueue()->DequeueIfQueued({lastMpdu});
+            GetQosTxop(AcIndex(m_sensingPriority))->GetWifiMacQueue()->DequeueIfQueued({lastMpdu});
         }
 
         Ptr<Packet> pollingPacket = Create<Packet>();
@@ -2865,10 +2781,10 @@ ApWifiMac::SensingRetransmission(uint8_t linkId)
         pollingHeader.SetAddr3(GetAddress());
         pollingHeader.SetDsNotTo();
         pollingHeader.SetDsFrom();
-        pollingHeader.SetQosTid(wifiAcList.find(AcIndex(m_SensingPriority))->first);
+        pollingHeader.SetQosTid(wifiAcList.find(AcIndex(m_sensingPriority))->first);
 
-        GetQosTxop(AcIndex(m_SensingPriority))->SetInfMac(this);
-        GetQosTxop(AcIndex(m_SensingPriority))->Queue(pollingPacket, pollingHeader);
+        GetQosTxop(AcIndex(m_sensingPriority))->SetInfMac(this);
+        GetQosTxop(AcIndex(m_sensingPriority))->Queue(pollingPacket, pollingHeader);
         StartCfPeriod();
     }
     else
@@ -2885,17 +2801,17 @@ ApWifiMac::EndSensing(uint8_t linkId)
     NS_LOG_FUNCTION(this);
     NS_ASSERT(GetPcfSupported());
     
-    Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_SensingPriority))->PeekNextMpdu(linkId);
+    Ptr<WifiMpdu> lastMpdu = GetQosTxop(AcIndex(m_sensingPriority))->PeekNextMpdu(linkId);
     if (lastMpdu)
     {
-        GetQosTxop(AcIndex(m_SensingPriority))->GetWifiMacQueue()->DequeueIfQueued({lastMpdu});
+        GetQosTxop(AcIndex(m_sensingPriority))->GetWifiMacQueue()->DequeueIfQueued({lastMpdu});
     }
 
     if (GetPcfSupported())
     {
         if (GetQosSupported())
         {
-            if (GetQosTxop(AcIndex(m_SensingPriority))->IsAccessRequested(linkId))
+            if (GetQosTxop(AcIndex(m_sensingPriority))->IsAccessRequested(linkId))
             {
                 SensingRetransmission(linkId);
             }
@@ -2936,24 +2852,13 @@ ApWifiMac::GetCfParameterSet(void) const
 }
 
 void
-ApWifiMac::IncrementPollingListIterator(void)
-{
-    NS_LOG_FUNCTION(this);
-    m_itCfPollingList++;
-    if (m_itCfPollingList == m_cfPollingList.end())
-    {
-        m_itCfPollingList = m_cfPollingList.begin();
-    }
-}
-
-void
 ApWifiMac::SetSensingPriority(uint16_t priority)
 {
     uint16_t MinCw = 0;
     uint16_t MaxCw = 0;
     if (!GetQosTxop(0))
     {
-        m_SensingPriority = priority;
+        m_sensingPriority = priority;
         return;
     }
     else
@@ -2996,22 +2901,15 @@ ApWifiMac::SetSensingPriority(uint16_t priority)
             break;
         }
     }
-    m_SensingPriority = priority;
-    m_SensingCw = std::make_pair(MinCw, MaxCw);
+    m_sensingPriority = priority;
+    m_sensingCw = std::make_pair(MinCw, MaxCw);
 }
 
 std::pair<uint16_t, uint16_t>
 ApWifiMac::GetSensingPriority(void) const
 {
-    return m_SensingCw;
+    return m_sensingCw;
 }
-
-/*
-*************************************
-Attempt to add Channel Sounding from ns3.37
-Public functions and attributes for Ap Wifi Mac
-*************************************
-*/
 
 void
 ApWifiMac::SetChannelSoundingSupported(bool enable)
@@ -3050,8 +2948,6 @@ ApWifiMac::GetSensingInterval() const
         std::random_device rd;                               // Obtain a random number from hardware
         std::mt19937 gen(rd());                              // Seed the generator
         std::poisson_distribution<int> poisson_dist(m_sensingInterval.GetMilliSeconds()); // Poisson distribution
-        // std::cout << "Poisson distribution: " << poisson_dist(gen) << std::endl;
-        // For most representable poisson distribution, we need to set the simulation time for 1000 times of the sensing interval
         return MilliSeconds(poisson_dist(gen));
     }
     else if (GetSensingIntervalType() == 2)
@@ -3068,19 +2964,6 @@ ApWifiMac::GetSensingInterval() const
     {
         return m_sensingInterval;
     }
-}
-
-/*
-*************************************
-Attempt to add MU-OFDMA
-Public functions and attributes for Ap Wifi Mac
-*************************************
-*/
-
-void
-ApWifiMac::SetWaitingCSIReportStatus(bool status)
-{
-    m_waitingCSIReport = status;
 }
 
 } // namespace ns3

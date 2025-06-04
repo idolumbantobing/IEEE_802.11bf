@@ -832,8 +832,10 @@ StaWifiMac::ScanningTimeout(const std::optional<ApInfo>& bestAp)
         }
     }
     SetState(WAIT_ASSOC_RESP);
-    if (GetManualConnection()) // use this for residential scenario of wifi-sensing since it is necessary to connect to the ap based on scenario
+    if (GetManualConnection()) 
     {
+        // this function override wifi connection eshtablishment 
+        // for some case of Wi-Fi sensing since it is necessary to connect to the ap based on scenario
         GetLink(bestAp->m_linkId).bssid = GetBssid(0U);
     }
     SendAssociationRequest(false);

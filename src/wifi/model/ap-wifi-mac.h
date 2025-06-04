@@ -171,12 +171,14 @@ class ApWifiMac : public InfrastructureWifiMac
      */
     uint8_t GetMaxBufferStatus(Mac48Address address) const;
 
+
     /*
     *************************************
-    Attempt to add PCF from ns3.33
-    Public classes for Ap Wifi Mac
+    Implementation of IEEE 802.11bf related support
+    Public functions and attributes for ApWifiMac        
     *************************************
     */
+
     /**
      * \param duration the maximum duration for the CF period.
      */
@@ -213,14 +215,6 @@ class ApWifiMac : public InfrastructureWifiMac
      * \return true if PCF is supported, false otherwise
      */
     bool GetPcfSupported() const;
-
-    /*
-    *************************************
-    Attempt to add Channel Sounding from ns3.37
-    Public functions and attributes for Ap Wifi Mac
-    *************************************
-    */
-
     /**
      * Enable or disable Channel Sounding support for the device.
      *
@@ -233,24 +227,18 @@ class ApWifiMac : public InfrastructureWifiMac
      * \return true if Channel Sounding is supported, false otherwise
      */
     bool GetChannelSoundingSupported() const;
-
-    /*
-    *************************************
-    Attempt to add MU-OFDMA
-    Public functions and attributes for Ap Wifi Mac
-    *************************************
-    */
-
     /**
-     * Send a CF-Poll packet to the next polling STA.
+     * Start the CF period.
      */
     void StartSensing(uint8_t linkId = 0U);
     /**
-     * Send a CF-End packet.
+     * Stop the CF period.
      */
     void EndSensing(uint8_t linkId = 0U);
     /**
-     * Send a CF-End packet.
+     * Retransmit the sensing frame.
+     *
+     * \param linkId the ID of the link on which to retransmit the sensing frame
      */
     void SensingRetransmission(uint8_t linkId = 0U);
     /**
@@ -258,17 +246,13 @@ class ApWifiMac : public InfrastructureWifiMac
      */
     void SetSensingPriority(uint16_t priority);
     /**
-     * Set the waiting CSI report status.
-     */
-    void SetWaitingCSIReportStatus(bool waiting);
-
-    /**
      * Get the sensing priority.
      */
     std::pair<uint16_t, uint16_t> GetSensingPriority(void) const;
-    std::pair<uint16_t, uint16_t> m_SensingCw; //!< Sensing Cw based on priority
-    u_int16_t m_SensingPriority;               //!< Sensing priority
-    u_int64_t m_sensingIntervalType = 0;           //!< Sensing interval type
+
+    std::pair<uint16_t, uint16_t> m_sensingCw;      //!< Sensing Cw based on priority
+    u_int16_t m_sensingPriority;                    //!< Sensing priority
+    u_int64_t m_sensingIntervalType = 0;            //!< Sensing interval type
 
   protected:
     /**
@@ -628,29 +612,8 @@ class ApWifiMac : public InfrastructureWifiMac
     Time m_bsrLifetime;            //!< Lifetime of Buffer Status Reports
     /// transition timeout events running for EMLSR clients
     std::map<Mac48Address, EventId> m_transitionTimeoutEvents;
-    /*
-    *************************************
-    Attempt to add PCF from ns3.33
-    private attribute for Ap Wifi Mac
-    *************************************
-    */
-    Ptr<InfrastructureWifiMac> m_inf;
-    EventId m_beaconEvent; //!< Event to generate one beacon
-    EventId m_cfpEvent;    //!< Event to generate one PCF frame
-    std::map<uint16_t, Mac48Address>
-        m_staList; //!< Map of all stations currently associated to the AP with their association ID
-    std::list<Mac48Address>
-        m_nonErpStations; //!< List of all non-ERP stations currently associated to the AP
-    std::list<Mac48Address>
-        m_nonHtStations; //!< List of all non-HT stations currently associated to the AP
-    std::list<Mac48Address>
-        m_cfPollingList; //!< List of all PCF stations currently associated to the AP
-    std::list<Mac48Address>::iterator
-        m_itCfPollingList; //!< Iterator to the list of all PCF stations currently associated to the
-                           //!< AP
-    bool m_SensingAppBegin = false; //!< Flag to indicate that the sensing application has started
-    bool m_waitingCSIReport = false; //!< Flag to indicate that the AP is waiting for a CSI report
-    Time m_sensingInterval;              //!< Rate of sensing in the simulation
+    
+    
     /// store value and timestamp for each Buffer Status Report
     struct BsrType
     {
@@ -673,17 +636,16 @@ class ApWifiMac : public InfrastructureWifiMac
     TracedCallback<uint16_t /* AID */, Mac48Address> m_deAssocLogger; ///< deassociation logger
 
     /*
-        *************************************
-        Attempt to add PCF from ns3.33
-        Private classes for Ap Wifi Mac
-        *************************************
+    *************************************
+    Implementation of IEEE 802.11bf related support
+    Private functions and attributes for ApWifiMac
+    *************************************
     */
 
     /**
      * Determine what is the next PCF frame and trigger its transmission.
      */
     void SendNextCfFrame(uint8_t linkId);
-
     /**
      * Return the CF parameter set of the current AP.
      *
@@ -691,25 +653,11 @@ class ApWifiMac : public InfrastructureWifiMac
      */
     CfParameterSet GetCfParameterSet(void) const;
 
-    /**
-     * Increment the PCF polling list iterator to indicate
-     * that the next polling station can be polled.
-     */
-    void IncrementPollingListIterator(void);
-
-    /*
-    *************************************
-    Attempt to add Channel Sounding from ns3.37
-    Private functions and attributes for Ap Wifi Mac
-    *************************************
-    */
-
-    std::list<uint16_t>
-        m_csStaIdList; //!< Store STA ID for all the stations that the beamformer requests CSI for
-    std::list<Mac48Address>
-        m_csDlPollingList; //!< List of all PCF stations currently associated to the AP
-    std::list<Mac48Address>
-        m_csUlPollingList; //!< List of all PCF stations currently associated to the AP
+    EventId m_beaconEvent;                  //!< Event to generate one beacon
+    EventId m_cfpEvent;                     //!< Event to generate one PCF frame
+    bool m_sensingAppBegin = false;         //!< Flag to indicate that the sensing application has started
+    bool m_waitingCSIReport = false;        //!< Flag to indicate that the AP is waiting for a CSI report
+    Time m_sensingInterval;                 //!< Rate of sensing in the simulation
 };
 
 } // namespace ns3

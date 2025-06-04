@@ -358,14 +358,24 @@ class StaWifiMac : public InfrastructureWifiMac
 
     /*
     *************************************
-    Attempt to add IEEE 802.11bf support
-    Public functions and attributes for Sta Wifi Mac
+    Implementation of IEEE 802.11bf related support
+    Public functions and attributes for StaWifiMac
     *************************************
     */
 
+    /**
+     * Set the manual connection mode.
+     *
+     * \param manual whether to set the manual connection mode
+     */
     void SetManualConnection(bool manual);
+    /**
+     * Return whether the manual connection mode is enabled.
+     *
+     * \return true if the manual connection mode is enabled, false otherwise
+     */
     bool GetManualConnection() const;
-    bool m_manualConnection;
+    bool m_manualConnection;            //!< whether the manual connection mode is enabled
 
   protected:
     /**
