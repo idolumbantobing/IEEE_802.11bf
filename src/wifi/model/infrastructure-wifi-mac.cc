@@ -51,7 +51,6 @@ InfrastructureWifiMac::GetTypeId(void)
 InfrastructureWifiMac::InfrastructureWifiMac()
     : m_WiFiSensingSupported(false),
       m_csSupported(false),
-      m_muMimoSupported(false),
       m_muSensingSupported(false),
       m_currentPacket(0),
       m_currentTxop(0),
@@ -77,8 +76,6 @@ InfrastructureWifiMac::~InfrastructureWifiMac()
 void
 InfrastructureWifiMac::SetQosSupported(bool enable)
 {
-    // NS_ASSERT_MSG(!(GetPcfSupported() && enable),
-    //               "QoS cannot be enabled when PCF support is activated (not supported)");
     WifiMac::SetQosSupported(enable);
 }
 
@@ -93,19 +90,6 @@ InfrastructureWifiMac::GetPcfSupported() const
 {
     return m_WiFiSensingSupported;
 }
-
-void
-InfrastructureWifiMac::SetMac(const Ptr<WifiMac> mac)
-{
-    m_mac = mac;
-}
-
-/*
- *************************************
- Attempt to add PCF from ns3.33
- Public Functions and Attributes for Infratructure Wifi Mac
- *************************************
-*/
 
 bool
 InfrastructureWifiMac::IsCfPeriod(uint8_t linkId = 0U) const
@@ -137,7 +121,6 @@ InfrastructureWifiMac::GetRemainingCfpDuration(void) const
     {
         return Seconds(0);
     }
-    // NS_ASSERT(remainingCfpDuration.IsPositive());
     return remainingCfpDuration;
 }
 
@@ -177,13 +160,6 @@ InfrastructureWifiMac::SetTxop(Ptr<Txop> txop)
     m_currentTxop = txop;
 }
 
-/*
- *************************************
- Attempt to add PCF from ns3.33
- Protected Functions and Attributes for Infratructure Wifi Mac
- *************************************
-*/
-
 void
 InfrastructureWifiMac::EndTxNoAck(uint8_t linkId)
 {
@@ -197,7 +173,6 @@ InfrastructureWifiMac::EndTxNoAck(uint8_t linkId)
 
     if (m_currentPacket->GetHeader(0).IsBeacon())
     {
-        // StartCfPeriod();
         m_currentTxop->EndTxNoAck(linkId, m_currentMpdu);
     }
     else if (m_currentPacket->GetHeader(0).IsCfEnd())
@@ -210,26 +185,5 @@ InfrastructureWifiMac::EndTxNoAck(uint8_t linkId)
     }
 }
 
-/*
- *************************************
- Attempt to add PCF from ns3.33
- Private Functions and Attributes for Infratructure Wifi Mac
- *************************************
-*/
-
-/*
- *************************************
- Attempt to add PCF from ns3.33
- Integration MAC Low Transmission Parameters in Infrastructure MAC
- Public, Protected, Private Function and Attributes for MAC Low Transmission Parameters
- *************************************
-*/
-
-/*
- *************************************
- Attempt to add Channel Sounding from ns3.37
- Public Functions and Attributes for Infratructure Wifi Mac
- *************************************
-*/
 
 } // namespace ns3

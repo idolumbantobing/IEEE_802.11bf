@@ -54,27 +54,11 @@ class InfrastructureWifiMac : public WifiMac
     virtual ~InfrastructureWifiMac();
 
     /**
-     * \param packet the packet to send.
-     * \param to the address to which the packet should be sent.
-     *
-     * The packet should be enqueued in a TX queue, and should be
-     * dequeued as soon as the channel access function determines that
-     * access is granted to this MAC.
-     */
-    virtual void Enqueue(Ptr<Packet> packet, Mac48Address to) = 0;
-    /**
      * Enable or disable QoS support for the device.
      *
      * \param enable whether QoS is supported
      */
     void SetQosSupported(bool enable);
-
-    /*
-    *************************************
-    Attempt to add PCF from ns3.33
-    Public Functions and Attributes for Infratructure Wifi Mac
-    *************************************
-    */
     /**
      * \param duration the maximum duration for the CF period.
      */
@@ -85,12 +69,6 @@ class InfrastructureWifiMac : public WifiMac
      * \return true if CTS-to-self is supported, false otherwise
      */
     bool GetCtsToSelfSupported(void) const;
-    /**
-     * Set up WifiMac associated with this MacLow.
-     *
-     * \param mac WifiMac associated with this MacLow
-     */
-    void SetMac(const Ptr<WifiMac> mac);
     /**
      * This function indicates whether Simulator::Now is in the CF period.
      *
@@ -145,55 +123,27 @@ class InfrastructureWifiMac : public WifiMac
      *
      */
     void SetTxop(Ptr<Txop> txop);
+    /**
+     * Function to indicate that the MPDU has been successfully sent.
+     *
+     * \param mpdu the MPDU to send
+     */
     void virtual TxOk(Ptr<const WifiMpdu> mpdu) = 0;
-
-    Ptr<const WifiMpdu> m_currentMpdu; // MPDU to send
-
-    /*
-    *************************************
-    Attempt to add Channel Sounding from ns3.37
-    Public functions and attributes for Infrastructure Wifi Mac
-    *************************************
-    */
-
-    bool m_csSupported; //!< Channel Sounding supported
     
-    /*
-    *************************************
-    Attempt to add MU-OFDMA
-    Public functions and attributes for Infratructure Wifi Mac
-    *************************************
-    */
-    bool m_muMimoSupported; //!< MU-OFDMA supported
-    bool m_muSensingSupported; //!< MU-OFDMA supported
+    Ptr<const WifiMpdu> m_currentMpdu;    // MPDU to send
+    
+
 
   protected:
-    /*
-     *************************************
-     Attempt to add PCF from ns3.33
-     Protected Functions and Attributes for Infratructure Wifi Mac
-     *************************************
-    */
-
     Ptr<WifiPsdu> m_currentPacket;  //!< Current packet transmitted/to be transmitted
     Ptr<Txop> m_currentTxop;        //!< Current TXOP
     WifiTxVector m_currentTxVector; //!< TXVECTOR used for the current packet transmission
 
-    bool m_WiFiSensingSupported;
+    bool m_WiFiSensingSupported;    //!< WiFi Sensing supported
+    bool m_muSensingSupported;      //!< WiFi Sensing in MU-OFDMA supported
+    bool m_csSupported;             //!< Channel Sounding supported
 
   private:
-    /**
-     * This Boolean is set \c true iff this WifiMac support PCF
-     */
-
-    ns3::Ptr<ns3::WifiMac> m_mac;
-    /*
-     *************************************
-     Attempt to add PCF from ns3.33
-     Private Functions and Attributes for Infratructure Wifi Mac
-     *************************************
-    */
-
     Time m_beaconInterval; //!< Expected interval between two beacon transmissions
     Time m_cfpMaxDuration; //!< CFP max duration
 
