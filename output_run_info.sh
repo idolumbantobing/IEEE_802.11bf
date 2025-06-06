@@ -31,7 +31,13 @@ Bandwidth=("20" "40" "80" "160")
 size=${#seed[@]}
 
 # Change and fill this variable for the save location in local, for example /home/ns3/WifiSensing ! 
-export Save_loc=""
+export Save_loc="/home/manuel/testing"
+
+# Take the number of CPU cores available / manually change for the number of cores you want to use
+core_num=$(nproc --all)-5 # Get the number of CPU cores available
+if [ "$core_num" -lt 1 ]; then
+    core_num=1 # Ensure at least one core is used
+fi
 
 ################################################################################################
 #                          Run the program with different variable                             #
@@ -103,342 +109,140 @@ if [ "$option" == "debug" ]; then
     ./ns3 run --gdb "examples/wireless/wifi-bf-network.cc $argument"
 fi
 
-##                                                    ##
-####        Testing variable : nStation              ###
-##                                                    ##
-if [ "$option" == "nStation" ]; then
-    counter=0
-    for nSta in "${nStations[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: nStations = $nSta, Seed = $nseed"
+################################################################################################
+#                                   ns3 Workshop                                               #
+################################################################################################
+# This is the script for the ns3 workshop. 
+# The script is used to run the program with different parameters and save the results in the local directory.
+seed=("347" "722" "876" "59" "463" "389" "815" "213" "630" "498" "174" "954" "320" "282" "791" "637" "450" "198" "903" "577" "764" "232" "344" "982" "615" "79" "829" "201" "941" "705" "364" "628" "110" "543" "976" "47" "489" "357" "698" "255" "921" "402" "676" "123" "861" "534" "777" "239" "997" "582"
+"367" "153" "802" "438" "294" "631" "580" "824" "139" "670" "911" "276" "48" "501" "112" "703" "980" "405" "762" "391" "17" "708" "242" "886" "56" "604" "755" "669" "318" "459" "821" "115" "497" "239" "711" "841" "692" "303" "950" "638" "553" "764" "406" "929" "871" "611" "473" "109" "921" "324") # 100 seeds
 
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed --simulationTime=60.0 --radius=1 --sensingInterval=1000" --no-build> $Save_loc/Result/Result_nStations_based_SU/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-            ) &
-            ((counter++))
+# 1. scenario - Network Density
+# using scenario 4 with area of 25 m squared
+nStations=("1" "2" "3" "4" "5" "6" "7" "8") # 8 stations
+soundingtype=("0" "2")
+numberBss=("1" "3" "5") 
+if [ "$option" == "density_workshop" ]; then
+    # Create base directory if it doesn't exist
+    mkdir -p "$Save_loc"
 
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
-
-##                                                    ##
-####        Testing variable : nStation MU           ###
-##                                                    ##
-if [ "$option" == "nStationMU" ]; then
-    counter=0
-    for nSta in "${nStations[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: nStations = $nSta, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=$nSta --seed=$nseed --soundingtype=2 --simulationTime=60.0 --radius=2 --sensingInterval=1000" --no-build > /$Save_loc/Result/Result_nStations_based_MU/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-            ) &
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
-
-##                                                    ##
-####        Testing variable : frequency              ###
-##                                                    ##
-frequency_test=("2.4" "5" "6")
-if [ "$option" == "frequency" ]; then
-    counter=0
-    for nSta in "${nStations[@]}"; do
-        for freq in "${frequency_test[@]}"; do
-            for nseed in "${seed[@]}"; do
-                echo "Processing file $counter: nStations = $nSta, Seed = $nseed"
-
-                # Run each iteration in the background for parallel processing
-                (
-                   ./ns3 run "examples/wireless/wifi-bf-network.cc --frequency=$freq --nStations=$nSta --seed=$nseed --simulationTime=60.0 --radius=1 --sensingInterval=1000" --no-build>/$Save_loc/Result/Result_frequency-based/"freq=$freq"/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
-                ) &
-                ((counter++))
-
-                # # Limit the number of parallel processes (adjust as needed)
-                if ((counter % 4 == 0)); then
-                    wait
-                fi
+    echo "Creating directory structure..."
+    for nBss in "${numberBss[@]}"; do
+        for nSta in "${nStations[@]}"; do
+            for sounding in "${soundingtype[@]}"; do
+                # Create directory structure (without seed-level folders)
+                mkdir -p "$Save_loc/Network_density/AP=$nBss/sounding=$sounding/nSta=$nSta"
             done
         done
     done
-fi
 
-##                                                    ##
-####          Testing variable : cfpMax              ###
-##                                                    ##
-if [ "$option" == "cfpMax" ]; then
     counter=0
-    for s in "${seed[@]}"; do
-        for cfp in "${cfpMaxDuration[@]}"; do
-            echo "Processing file $counter: cfpMaxDuration = $cfp, Seed = $s"
+    for nBss in "${numberBss[@]}"; do
+        for nSta in "${nStations[@]}"; do
+            for sounding in "${soundingtype[@]}"; do
+                for nseed in "${seed[@]}"; do
+                    echo "Processing file $counter: nBss=$nBss, soundingType=$sounding, nStations = $nSta, Seed = $nseed"
 
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --cfpMaxDuration=$cfp --seed=$s" >/$Save_loc/Result/Result_maxcfp-based/maxCFP=$cfp/nolog_maxCFP=$cfp,seed=$s.out 2>&1
-            ) &
+                    # Run each iteration in the background for parallel processing
+                    (
+                        ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$nBss --nBfBss=$nBss --scenario=1 --radius=25.0 --nStations=$nSta --soundingtype=$sounding --seed=$nseed --simulationTime=10.0 --sensingInterval=100" --no-build> $Save_loc/Network_density/"AP=$nBss"/"sounding=$sounding"/"nSta=$nSta"/nolog_nSta=$nSta,seed=$nseed.out 2>&1
+                    ) &
+                    ((counter++))
 
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
+                    # Limit the number of parallel processes (adjust as needed)
+                    if ((counter % core_num == 0)); then
+                        wait
+                    fi
+                done
+            done
         done
     done
+    
+    # Wait for all background jobs to finish
+    wait
+    SOURCE_FILE="python_tools/NetworkDensity_DataExtractor.py"
+    # Run DataExtractor.py once per AP/sounding folder
+    for nBss in "${numberBss[@]}"; do
+        for sounding in "${soundingtype[@]}"; do
+            TARGET_DIR="$Save_loc/Network_density/AP=$nBss/sounding=$sounding"
+
+            # Copy the Python script
+            cp -n "$SOURCE_FILE" "$TARGET_DIR/"
+
+            # Run the script in that directory
+            (cd "$TARGET_DIR" && python3 NetworkDensity_DataExtractor.py) &
+        done
+    done
+
     wait
 fi
 
-##                                                    ##
-####        Testing variable : multipleBss           ###
-##                                                    ##
-if [ "$option" == "multipleBssAx" ]; then
-    counter=0
-    for BssNum in "${nBss[@]}"; do
-        for s in "${seed[@]}"; do
-            nAxBss=$((BssNum - 1))
-            echo "Processing file $counter: nBss = $BssNum, Seed = $s"
 
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=$nAxBss --seed=$s --sensingInterval=1000 --simulationTime=10.0" > /$Save_loc/Result/Result_multipleBSS/MultipleAX/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.txt 2>&1
-            ) &
 
-            ((counter++))
+# 2. scenario - Sensing Interval
+# using scenario 4 with area of 25 m squared
+sensingInterval=("1" "2" "3" "4" "5" "6" "7" "8" "9" "11" "12" "13" "14" "15" "16" "17" "18" "19" "10" "20" "30" "40" "50") # 21 sensing intervals
+nBfBss=("1" "3" "5") # 3 BSS
+# Total simulation: 21 x 3 x 100 = 6300 simulations
+if [ "$option" == "interval_workshop" ]; then
+    mkdir -p "$Save_loc"
 
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 20 == 0)); then
-                wait
-            fi
+    echo "Creating directory structure..."
+    for nBss in "${numberBss[@]}"; do
+        for interval in "${sensingInterval[@]}"; do       
+            # Create directory structure (without seed-level folders)
+            mkdir -p "$Save_loc/Sensing_interval/AP=$nBss/rate=$interval"
         done
     done
-fi
 
-if [ "$option" == "multipleBssBf" ]; then
     counter=0
-    for BssNum in "${nBss[@]}"; do
-
-        for s in "${seed[@]}"; do
-            echo "Processing file $counter: nBss = $BssNum, Seed = $s"
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --seed=$s --simulationTime=10.0" >/$Save_loc/Result/Result_multipleBSS/MultipleBF/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
-            ) &
-
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 20 == 0)); then
-                wait
-            fi
-
-        done
-
-    done
-fi
-
-nBss=("2" "3" "4" "5" "6")
-if [ "$option" == "multipleBssResidential" ]; then
-    counter=0
-    for dense in "${residntialDensity[@]}"; do
-        for s in "${seed[@]}"; do
-            echo "Processing file $counter: dense = $dense, Seed = $s"
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --residentialDensity=$dense --scenario=3 --seed=$s --simulationTime=10.0" >/$Save_loc/Result/Result_multipleBSS/Residential/"dense=$dense"/Result/nolog_dense=$dense,seed=$s.out 2>&1
-
-            ) &
-
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
-
-if [ "$option" == "multipleBssBfmulSta" ]; then
-    counter=0
-    for nSta in "${nStationsMultiBss[@]}"; do
-        for BssNum in "${nBssMulSta[@]}"; do
+    for nBss in "${nBfBss[@]}"; do
+        for Interval in "${sensingInterval[@]}"; do
             for s in "${seed[@]}"; do
-                echo "Processing file $counter: nSta=$nSta, nBss = $BssNum, Seed = $s"
+                echo "Processing file $counter: nBss=$nBss, Interval=$Interval, Seed = $s"
 
                 # Run each iteration in the background for parallel processing
                 (
-                    forRatio=$((2 * BssNum))
-                    ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$forRatio --nAxBss=$BssNum --nStations=$nSta --seed=$s " >/$Save_loc/Result/Result_multipleBSS/MultipleRatioMultipleSta/"sta=$nSta"/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
+                    ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$nBss --scenario=1 --nStations=8 --soundingtype=2 --radius=25.0 --sensingInterval=$Interval --simulationTime=10.0 --seed=$s" --no-build >/$Save_loc/Sensing_interval/"AP=$nBss"/"rate=$Interval"/nolog_multipleBss_seed=$s.out 2>&1
                 ) &
 
                 ((counter++))
 
                 # Limit the number of parallel processes (adjust as needed)
-                if ((counter % 4 == 0)); then
+                if ((counter % core_num == 0)); then
                     wait
                 fi
-
             done
         done
     done
-fi
 
-if [ "$option" == "multipleBssRatio" ]; then
-    BssNum=("12")
-    counter=0
-    for numer in "${numerator[@]}"; do
-        for s in "${seed[@]}"; do
-            nAxBss=$((BssNum - 1))
-            echo "Processing file $counter: nBss = $BssNum, Seed = $s"
+    # Wait for all background jobs to finish
+    wait
 
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --numerator=$numer --seed=$s" >/$Save_loc/Result/Result_multipleBSS/Ratio/"ratio=$numer""to12"/nolog_multipleBss=seed=$s.out 2>&1
+    SOURCE_FILE="python_tools/SensingInterval_DataExtractor.py"
+    SOURCE_FILE2="python_tools/SensingInterval_FailPercentage_GraphMaker.py"
+    TARGET_DIR="$Save_loc/Sensing_interval"
 
-            ) &
+    # Copy the Python script
+    cp -n "$SOURCE_FILE2" "$TARGET_DIR/"
+    # Run DataExtractor.py once per AP/sounding folder
+    for nBss in "${numberBss[@]}"; do
+        TARGET_DIR="$Save_loc/Sensing_interval/AP=$nBss"
 
-            ((counter++))
+        echo "Copying and running DataExtractor.py in $TARGET_DIR..."
 
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
+        # Copy the Python script
+        cp -n "$SOURCE_FILE" "$TARGET_DIR/"
 
-        done
+        # Run the script in that directory
+        (cd "$TARGET_DIR" && python3 SensingInterval_DataExtractor.py) &
+
     done
-fi
 
-if [ "$option" == "multipleBssBfInterval" ]; then
-    counter=0
-    for Interval in "${sensingInterval[@]}"; do
-        for BssNum in "${nBssMulSta[@]}"; do
-            for s in "${seed[@]}"; do
-                echo "Processing file $counter: Interval=$Interval, nBss = $BssNum, Seed = $s"
+    # Wait for all background jobs to finish
+    wait
+    cd ..
+    # Run the graph maker script
+    python3 SensingInterval_FailPercentage_GraphMaker.py
 
-                # Run each iteration in the background for parallel processing
-                (
-                    ./ns3 run "examples/wireless/wifi-bf-network.cc --nBss=$BssNum --nAxBss=1 --simulationTime=$Interval --sensingInterval=$Interval --seed=$s" --no-build >/$Save_loc/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"/"nBss=$BssNum"/nolog_multipleBss=$BssNum,seed=$s.out 2>&1
-                ) &
-
-                ((counter++))
-
-                # Limit the number of parallel processes (adjust as needed)
-                if ((counter % 4 == 0)); then
-                    wait
-                fi
-
-            done
-        done
-    done
-fi
-
-sensingInterval=("10" "20" "30" "40" "50" "100" "500" "1000")
-if [ "$option" == "multipleBssBfIntervalOffice" ]; then
-    counter=0
-    for Interval in "${sensingInterval[@]}"; do
-        for s in "${seed[@]}"; do
-            echo "Processing file $counter: Interval=$Interval, Seed = $s"
-
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --scenario=2 --nBfBss=6 --simulationTime=60.0 --sensingInterval=$Interval --seed=$s" --no-build >/$Save_loc/Result/Result_multipleBSS/multipleBFInterval/"Interval=$Interval"//nolog_multipleBss_seed=$s.out 2>&1
-            ) &
-
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-
-        done
-    done
-fi
-
-##                                                    ##
-####     Testing variable : radius single BSS        ###
-##                                                    ##
-if [ "$option" == "radius" ]; then
-    counter=0
-    for rad in "${radius[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: radius = $rad, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --nStations=4 --radius=$rad --seed=$nseed --simulationTime=1.0" >/$Save_loc/Result/Result_distance-based/"r=$rad"/nolog_radius=$rad,seed=$nseed.out 2>&1
-
-            ) &
-            
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
-
-##                                                    ##
-####  Testing variable : sensing priority            ###
-##                                                    ##
-if [ "$option" == "idealSensPrioScenario" ]; then
-    counter=0
-    for prio in "${senPriority[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: prio = $prio, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --sensingPriority=$prio --seed=$nseed --nBss=2 --nAxBss=1 --simulationTime=60.0" >/$Save_loc/Result/Result_sensPrio/Result_sensPrio_Ideal/"prio=$prio"/nolog_priority=seed=$nseed.out 2>&1
-
-            ) &
-            
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
-fi
-
-
-##                                                    ##
-####  Testing variable : Bandwidth scenario        ###
-##                                                    ##
-if [ "$option" == "Bandwidth" ]; then
-    counter=0
-    for band in "${Bandwidth[@]}"; do
-        for nseed in "${seed[@]}"; do
-            echo "Processing file $counter: Bandwidth = $band, Seed = $nseed"
-
-            # Run each iteration in the background for parallel processing
-            (
-                ./ns3 run "examples/wireless/wifi-bf-network.cc --channelWidth=$band --seed=$nseed --nBss=2 --nAxBss=1 --nStations=4 --simulationTime=10.0" >/$Save_loc/Result/Result_bandwidth_based/"b=$band"/nolog_bandwidth=seed=$nseed.out 2>&1
-
-            ) &
-            
-            ((counter++))
-
-            # Limit the number of parallel processes (adjust as needed)
-            if ((counter % 4 == 0)); then
-                wait
-            fi
-        done
-    done
 fi
