@@ -1,7 +1,7 @@
 # Implementation of IEEE 802.11bf Sub-7GHz MAC in ns-3 #
 ## Introduction
 
-  This repository contains an ns-3 implementation and module extension of IEEE 802.11bf Wi-Fi Sensing version ns-3.40. As the standard IEEE 802.11bf is currently developing, this repository provides an ns-3 implementation to simulate and evaluate the sensing functionality in Wi-Fi technology based on the draft detailed in [this paper](https://ieeexplore.ieee.org/document/10467185)[^1]. Detailed information and description about the implementation and some theoretical background can be found in [this publication](https://publications.rwth-aachen.de/record/998149).
+  This repository contains an ns-3 implementation and module extension of IEEE 802.11bf Wi-Fi Sensing version ns-3.40. As the standard IEEE 802.11bf is currently developing, this repository provides an ns-3 implementation to simulate and evaluate the sensing functionality in Wi-Fi technology based on the draft detailed in [this paper](https://ieeexplore.ieee.org/document/10467185)[^1].
 
 [^1]: T. Ropitault et al., "IEEE 802.11bf WLAN Sensing Procedure: Enabling the Widespread Adoption of WiFi Sensing," in IEEE Communications Standards Magazine, vol. 8, no. 1, pp. 58-64, March 2024, doi: 10.1109/MCOMSTD.0004.2200062.
 keywords: {Location awareness;Sensors;Object recognition;Task analysis;Wireless fidelity;IEEE 802.11 Standard;Communication standards;Motion detection;Human activity recognition;Wireless LAN;Client-server systems}
@@ -26,12 +26,14 @@ To demonstrate the implementation please refers to this [file](/examples/wireles
 There is a [shell script](/output_run_info.sh) defined by the author to automate the output of the simulation code. Please refer to this file for understanding how to efficiently run the simulation. These are few tips for running the program:
 - Build the ns3: ./output_run_info.sh build (type: debug, optimized)
   - example: ./output_run_info.sh build optimized
-- Fast run: ./output_run_info.sh investigate (logging type: no_log, log_info, log_function) ("parameter") (logging file name)
+- Run and investigate using logging: ./output_run_info.sh investigate (logging type: no_log, log_info, log_function) ("parameter") (logging output file name)
   - example: ./output_run_info.sh investigate no_log "--nBss=2" twoBss
 - Scenario run: ./output_run_info.sh (scenario name)
-  - example: ./output_run_info.sh investigate multipleBssBf
+  - example: ./output_run_info.sh density_workshop
 
-Additional Python tools to extract the data and perform calculations can be found in [this folder](/Python\_tools).
+(!) Additional Python tools to extract the data and perform calculations can be found in [this folder](/python\_tools).
+
+(!) To run the scenario, make sure to update the Save_loc variable in the [shell script](/output_run_info.sh) to correctly specify the output directory. 
 
 ## References
 If you use this module in your research, please cite following:
