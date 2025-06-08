@@ -344,6 +344,7 @@ build_lib(
     test/wifi-dynamic-bw-op-test.cc
     test/wifi-eht-info-elems-test.cc
     test/wifi-emlsr-test.cc
+    test/wifi-bf-test.cc
     test/wifi-error-rate-models-test.cc
     test/wifi-ie-fragment-test.cc
     test/wifi-mac-ofdma-test.cc
@@ -360,5 +361,6 @@ build_lib(
     test/wifi-txop-test.cc
     test/wifi-phy-cca-test.cc
     test/wifi-non-ht-dup-test.cc
-    test/wifi-phy-mu-mimo-test.cc
+    test/wifi-phy-mu-mimo-test.cc 
+    test/wifi-bf-test.cc
 )
