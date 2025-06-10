@@ -387,7 +387,7 @@ MultiUserScheduler::GetMaxSizeOfQosNullAmpdu(const CtrlTriggerHeader& trigger) c
     return maxSize;
 }
 
-void MultiUserScheduler::SensingTimeout()
+void MultiUserScheduler::ResetTxFormatSensingTimeout()
 {
     m_lastTxInfo[0U].lastTxFormat = NO_TX;
 }

@@ -51,53 +51,16 @@
 #include <cmath>
 #include <random>
 
-/* This is a simple example in order to show the frames exchanged in 802.11 PCF.
- * The output prints the overal throughput as well as the number of different PCF frames that have
- * been transmitted.
- *
- * It is possible to tune some parameters using the command line:
- *   - number of connected stations
- *   - enable/disable PCF
- *   - enable PCAP output file generation in order to vizualise frame exchange.
- *   - configure UDP data traffic:
- *     -> select traffic direction: --trafficDirection=<upstream|downstream>
- *
- * For example, one can observe the benefit of PCF over DCF when the number of stations increased:
- *   ./waf --run "wifi-pcf enablePcf=0 --nWifi=10" => DCF only
- *   ./waf --run "wifi-pcf enablePcf=1 --nWifi=10" => alternance of PCF and DCF
- *
- * One can also change the value of cfpMaxDuration: a shorter valer means the granted time for PCF
- * is shorter, and so it's benefit is reduced.
- *   ./waf --run "wifi-pcf enablePcf=1 --nWifi=10 --cfpMaxDuration=10240"
- *
- * One can also see the different types of piggybacked frames depending on the traffic direction and
- * whether PCF is enabled or not:
- *   ./waf --run "wifi-pcf enablePcf=0 --nWifi=1" => only CF_POLL and DATA_NULL frames should be
- * seen
- *   ./waf --run "wifi-pcf enablePcf=1 --nWifi=1 --trafficDirection=upstream" => no DATA_NULL frames
- * should be seen
- *   ./waf --run "wifi-pcf enablePcf=1 --nWifi=1 --trafficDirection=downstream" => no CF_END_ACK
- * frames should be seen
- */
-
 /* This is a simple example in order to show the frames exchanged in sensing transmission of
  * 802.11bf.
  *
- * It is possible to tune some parameters using the command line:
- *   - number of connected stations
- *   - enable/disable Wi-Fi sensing
- *   - enable PCAP output file generation in order to vizualise frame exchange.
- *   - configure UDP data traffic:
- *     -> select traffic direction: --trafficDirection=<upstream|downstream>
+ * One can change the number of STAs to participate in sensing
+ * ./ns3 --run "examples/wireless/wifi-bf-network.cc--nStations=2"
+ * 
+ * One can also change the value of cfpMaxDuration: a shorter valer means the granted time for sensing is shorter
+ * ./ns3 --run "examples/wireless/wifi-bf-network.cc --cfpMaxDuration=50 --nStations=2"
  *
- * For example, to observe the effect number of stations increased:
- *   ./ns3 run "wifi-bf-network.cc enablePcf=0 --nWifi=10" => DCF only
- *   ./ns3 run "wifi-bf-network.cc --nWifi=10" => alternance of PCF and DCF
- *
- * One can also change the value of cfpMaxDuration: a shorter valer means the granted time for PCF
- * is shorter, and so it's benefit is reduced.
- *   ./ns3 --run "wifi-pcf enablePcf=1 --nWifi=10 --cfpMaxDuration=10240"
- *
+ * This is an example output of the simulation:
  * Throughput for BSS 1: 0 Mbit/s
  * Throughput for BSS 2: 20.748 Mbit/s
  * # Signal (dbm): -24.7374
@@ -115,8 +78,6 @@
  * # tx CTS-to-self: 3768
  * # average Latency: 0.000945553
  * # inner Counter: 1884
- *
-# total Latency: 1.78142
  */
 
 using namespace ns3;
@@ -316,40 +277,6 @@ TxCallback(std::string context, Ptr<const Packet> p, double txPowerW)
     }
 }
 
-void
-RxEndCallback(Ptr<const Packet> packet)
-{
-    WifiMacHeader hdr;
-    packet->PeekHeader(hdr);
-    if (hdr.IsActionNoAck() && Simulator::Now() > Seconds(1))
-    {
-        m_csiBeamformingReport++;
-        // if (multipleBss)
-        // {
-        //     // if (m_csiBeamformingReport % (nBfBss * nStations) == 0 && m_innerCounter < 1)
-        //     // {
-        //     //     m_avgTrueLatency = m_avgTrueLatency + (Simulator::Now() - m_sumTrueLatency);
-        //     //     m_innerCounter++;
-        //     //     // std::cout << "All reporting obtained in " << Simulator::Now() << std::endl;
-        //     // }
-        //     if (m_csiBeamformingReport % nStations == 0 && m_innerCounter < 1)
-        //     {
-        //         // std::cout << "All reporting obtained in " << Simulator::Now() << std::endl;
-        //         m_avgTrueLatency = m_avgTrueLatency + (Simulator::Now() - m_sumTrueLatency);
-        //         m_innerCounter++;
-        //     }
-        // }
-        // else
-        // {
-        //     if (m_csiBeamformingReport % nStations == 0 && m_innerCounter < 1)
-        //     {
-        //         // std::cout << "All reporting obtained in " << Simulator::Now() << std::endl;
-        //         m_avgTrueLatency = m_avgTrueLatency + (Simulator::Now() - m_sumTrueLatency);
-        //         m_innerCounter++;
-        //     }
-        // }
-    }
-}
 
 // Function to split a string by a delimiter and return a vector of substrings
 std::vector<std::string>
@@ -405,6 +332,7 @@ setLocationScenario(int scenario,
 {
     if (scenario == 1)
     {
+        double areaSize = radius;
         double x_baseAp = 0.0;
         double y_baseAp = 0.0;
         double baseAngle = 0.0;
@@ -417,10 +345,12 @@ setLocationScenario(int scenario,
             rasioAngle = 3;
         }
         std::cout << "rasioAngle: " << rasioAngle << std::endl;
+
         for (int i = 0; i < nBss; i++)
         {
-            x_baseAp = (rasioAngle * radius) * cos(baseAngle * i);
-            y_baseAp = (rasioAngle * radius) * sin(baseAngle * i);
+            // Randomly place AP
+            x_baseAp = getRandomCoordinate(-areaSize, areaSize);
+            y_baseAp = getRandomCoordinate(-areaSize, areaSize);
             if (i < nBfBss)
             {
                 std::cout << "(bf)AP: " << x_baseAp << ", " << y_baseAp << std::endl;
@@ -430,24 +360,25 @@ setLocationScenario(int scenario,
                 std::cout << "(ax)AP: " << x_baseAp << ", " << y_baseAp << std::endl;
             }
             positionAlloc->Add(Vector(x_baseAp, y_baseAp, 0.0));
+
             if (i < nBfBss)
             {
-                double Angle = 2 * M_PI / allBss[i].nStations_sensing;
                 for (uint32_t j = 0; j < allBss[i].nStations_sensing; j++)
                 {
-                    double x = radius * cos(Angle * j) + x_baseAp;
-                    double y = radius * sin(Angle * j) + y_baseAp;
+                    // Randomly place STA within the area
+                    double x = getRandomCoordinate(-areaSize, areaSize);
+                    double y = getRandomCoordinate(-areaSize, areaSize);
                     std::cout << "(bf)STA: " << x << ", " << y << std::endl;
                     positionAlloc->Add(Vector(x, y, 0.0));
                 }
             }
             else
             {
-                double Angle = 2 * M_PI / allBss[i].nStations_no_sensing;
                 for (uint32_t j = 0; j < allBss[i].nStations_no_sensing; j++)
                 {
-                    double x = radius * cos(Angle * j) + x_baseAp;
-                    double y = radius * sin(Angle * j) + y_baseAp;
+                    // Randomly place STA within the area
+                    double x = getRandomCoordinate(-areaSize, areaSize);
+                    double y = getRandomCoordinate(-areaSize, areaSize);
                     std::cout << "(ax)STA: " << x << ", " << y << std::endl;
                     positionAlloc->Add(Vector(x, y, 0.0));
                 }
@@ -832,7 +763,6 @@ main(int argc, char* argv[])
     nAxBss = 0;
     nStations = 1;
     nStations_net2 = 1;
-    bool enablePcap = false;
     bool enableWiFiSensing = true;
     multipleBss = true;
     bool downlink{true};
@@ -899,7 +829,6 @@ main(int argc, char* argv[])
                  downlink);
     cmd.AddValue("cfpMaxDuration", "CFP max duration in microseconds", cfpMaxDurationMs);
     cmd.AddValue("simulationTime", "Simulation time in seconds", simulationTime);
-    cmd.AddValue("enablePcap", "Enable/disable PCAP output", enablePcap);
     cmd.AddValue("channelWidth", "Channel bandwidth", channelWidth);
     cmd.AddValue(
         "channelSoundingInterval",
@@ -915,7 +844,6 @@ main(int argc, char* argv[])
                  "Maximum number of stations in downlink MU-MIMO data transmission",
                  maxNumDlMuMimoSta);
     cmd.AddValue("mcs", "If set, limit testing to a specific MCS (0-11)", mcs);
-    cmd.AddValue("enablePcap", "Whether to output PCAP file", enablePcap);
     cmd.AddValue("csMode",
                  "Wifi mode used for beamforming report feedback (If set as '0', wifi mode is "
                  "automatically selected as the same mode as in data transmission)",
@@ -977,14 +905,12 @@ main(int argc, char* argv[])
 
     if (frequency == 6)
     {
-        wifi.SetStandard(WIFI_STANDARD_80211bf);
         ctrlRate = StringValue(ossDataMode.str());
         channelStr += "BAND_6GHZ, 0}";
         Config::SetDefault("ns3::LogDistancePropagationLossModel::ReferenceLoss", DoubleValue(48));
     }
     else if (frequency == 5)
     {
-        wifi.SetStandard(WIFI_STANDARD_80211bf);
         std::ostringstream ossControlMode;
         ossControlMode << "OfdmRate" << nonHtRefRateMbps << "Mbps";
         ctrlRate = StringValue(ossControlMode.str());
@@ -992,7 +918,6 @@ main(int argc, char* argv[])
     }
     else if (frequency == 2.4)
     {
-        wifi.SetStandard(WIFI_STANDARD_80211bf);
         std::ostringstream ossControlMode;
         ossControlMode << "ErpOfdmRate" << nonHtRefRateMbps << "Mbps";
         ctrlRate = StringValue(ossControlMode.str());
@@ -1032,28 +957,18 @@ main(int argc, char* argv[])
     SpectrumWifiPhyHelper phy;
     phy.SetPcapDataLinkType(WifiPhyHelper::DLT_IEEE802_11_RADIO);
     phy.SetChannel(spectrumChannel);
-    // phy.SetErrorRateModel("ns3::TableBasedErrorRateModel");
     phy.Set("ChannelSettings", StringValue(channelStr));
     phy.Set("TxPowerStart", DoubleValue(23.0));
     phy.Set("TxPowerEnd", DoubleValue(23.0));
     phy.Set("TxPowerLevels", UintegerValue(1));
 
-    // YansWifiChannelHelper channel = YansWifiChannelHelper::Default();
-    // YansWifiPhyHelper phy;
-    // phy.SetPcapDataLinkType(WifiPhyHelper::DLT_IEEE802_11_RADIO);
-    // phy.SetChannel(channel.Create());
-    // phy.Set("ChannelSettings", StringValue(channelStr));
-    // phy.Set("TxPowerStart", DoubleValue(23.0));
-    // phy.Set("TxPowerEnd", DoubleValue(23.0));
-    // phy.Set("TxPowerLevels", UintegerValue(1));
-
     Ssid ssid = Ssid("wifi-bf-network");
+    wifi.SetStandard(WIFI_STANDARD_80211bf);
     wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
                                  "DataMode",
                                  StringValue(ossDataMode.str()),
                                  "ControlMode",
                                  ctrlRate);
-    // wifi.SetRemoteStationManager("ns3::MinstrelWifiManager");
     wifi.ConfigHeOptions("NgSu",
                          UintegerValue(ngSu),
                          "NgMu",
@@ -1664,10 +1579,6 @@ main(int argc, char* argv[])
         Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/PhyTxBegin",
                         MakeCallback(&TxCallback));
 
-        // Config::ConnectWithoutContext(
-        //     "/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/PhyRxEnd",
-        //     MakeCallback(&RxEndCallback));
-
         Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/"
                                       "$ns3::WifiPhy/MonitorChannelAccess",
                                       MakeCallback(&MonitorChannelAccess));
@@ -1675,23 +1586,6 @@ main(int argc, char* argv[])
         Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/"
                                       "$ns3::WifiPhy/MonitorSnifferRx",
                                       MakeCallback(&MonitorSniffRx));
-
-        if (enablePcap)
-        {
-            if (multipleBss)
-            {
-                // phy.EnablePcap("bf-wifi-network", allBss[nBfBss - 1].staDevices);
-                // phy.EnablePcap("bf-wifi-network", allBss[nBfBss].staDevices_net2);
-            }
-            else
-            {
-                // phy.EnablePcap("bf-wifi-network", apDevice);
-                // phy.EnablePcap("bf-wifi-network", apDevice_net2);
-                // phy.EnablePcap("bf-wifi-network", staDevices);
-                // phy.EnablePcap("bf-wifi-network", staDevices_net2);
-                // phy.EnablePcapAll("bf-wifi-network");
-            }
-        }
 
         Simulator::Stop(Seconds(simulationTime + 1));
         Simulator::Run();
@@ -1824,11 +1718,8 @@ main(int argc, char* argv[])
                 {
                     UdpClientHelper client(serverInterfaces.GetAddress(index), portNumber);
                     client.SetAttribute("MaxPackets", UintegerValue(4294967295U));
-                    // client.SetAttribute("MaxPackets", UintegerValue(1U));
                     client.SetAttribute("Interval",
                                         TimeValue(Time("0.00001"))); // packets/s
-                    // client.SetAttribute("Interval",
-                    //                     TimeValue(Time("1"))); // packets/s;
                     client.SetAttribute("PacketSize", UintegerValue(payloadSize));
                     clientApplications = client.Install(clientNodes.Get(index));
                     clientApplications.Start(Seconds(1.0));
@@ -1977,10 +1868,6 @@ main(int argc, char* argv[])
         Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/PhyTxBegin",
                         MakeCallback(&TxCallback));
 
-        // Config::ConnectWithoutContext(
-        //     "/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/PhyRxEnd",
-        //     MakeCallback(&RxEndCallback));
-
         Config::ConnectWithoutContext("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/"
                                       "$ns3::WifiPhy/MonitorChannelAccess",
                                       MakeCallback(&MonitorChannelAccess));
@@ -1989,22 +1876,6 @@ main(int argc, char* argv[])
                                       "$ns3::WifiPhy/MonitorSnifferRx",
                                       MakeCallback(&MonitorSniffRx));
 
-        if (enablePcap)
-        {
-            if (multipleBss)
-            {
-                // phy.EnablePcap("bf-wifi-network", allBss[nBfBss - 1].staDevices);
-                phy.EnablePcap("ax-wifi-network", allBss[nBfBss].staDevices_net2);
-            }
-            else
-            {
-                // phy.EnablePcap("bf-wifi-network", apDevice);
-                // phy.EnablePcap("bf-wifi-network", apDevice_net2);
-                // phy.EnablePcap("bf-wifi-network", staDevices);
-                // phy.EnablePcap("bf-wifi-network", staDevices_net2);
-                // phy.EnablePcapAll("bf-wifi-network");
-            }
-        }
         Simulator::Stop(Seconds(simulationTime + 1));
         Simulator::Run();
 
@@ -2135,26 +2006,10 @@ main(int argc, char* argv[])
         {
             if (it->second.m_avgTrueLatency > Seconds(0) && it->second.m_innerCounter > 0)
             {
-                // m_avgTrueLatency_net2 += it->second.m_avgTrueLatency /
-                // (it->second.m_innerCounter);
                 m_avgTrueLatency_net2 += it->second.m_avgTrueLatency;
             }
-            // std::cout << it->first << " average latency: " << it->second.stillSensing <<
-            // std::endl;
         }
-        if (nAxBss > 0)
-        {
-            if (m_avgTrueLatency_net2.GetSeconds() > 0.0)
-            {
-                std::cout << "# average latency (ax): "
-                          << m_avgTrueLatency_net2.GetSeconds() / nAxBss << std::endl;
-            }
-            else
-            {
-                std::cout << "# average latency (ax): -nan " << std::endl;
-            }
-        }
-
+       
         std::cout << "# successful sensing: " << m_innerCounter << std::endl;
         int unsuccessfulSensing =
             simulationTime * (1000 / sensingInterval) * nBfBss - m_innerCounter;

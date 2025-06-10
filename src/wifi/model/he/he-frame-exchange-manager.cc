@@ -2749,7 +2749,7 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
 
                 if (m_txTimer.GetStasExpectedToRespond().empty())
                 {
-                    // // we do not expect any other response
+                    // we do not expect any other response
                     m_txTimer.Cancel();
                     return;
                 }
@@ -3385,7 +3385,6 @@ HeFrameExchangeManager::BfReportTimeout(void)
             if (m_apMac && m_edca && m_apMac->GetPcfSupported())
             {
                 ResetSensingTimeout();
-                // std::cout << "--- Collision in reporting phase ---" << std::endl;
                 m_apMac->SensingRetransmission();
             }
             else
@@ -3399,7 +3398,6 @@ HeFrameExchangeManager::BfReportTimeout(void)
             if (m_apMac && m_edca && m_apMac->GetPcfSupported())
             {
                 ResetSensingTimeout();
-                // std::cout << "--- Collision in reporting phase ---" << std::endl;
                 m_apMac->SensingRetransmission();
             }
             else
@@ -3497,51 +3495,19 @@ HeFrameExchangeManager::ReceivePollingFrame(const CtrlTriggerHeader& trigger,
     cts.SetDsNotTo();
     cts.SetNoMoreFragments();
     cts.SetNoRetry();
-    // cts.SetAddr1(GetBssid());
-    // cts.SetAddr2(GetAddress());
-
     cts.SetAddr1(hdr.GetAddr2());
     cts.SetAddr2(m_self);
-    // cts.SetAddr3(hdr.GetAddr2());
-
-    // Time ctsDuration = m_phy->CalculateTxDuration(GetCtsSize(),
-    //                                               ctsToSelfProtection->ctsTxVector,
-    //                                               m_phy->GetPhyBand());
-
-    // Time ctsDuration = m_phy->CalculateTxDuration(GetCtsSize(),
-    //                                               ctsToSelfProtection->ctsTxVector,
-    //                                               WIFI_PHY_BAND_2_4GHZ);
 
     WifiTxParameters txParams;
     WifiMode modetxParams("HeMcs0");
     txParams.m_txVector.SetMode(modetxParams);
-    // txParams.m_txVector = GetWifiRemoteStationManager()->GetCtsToSelfTxVector();
     txParams.m_txVector = GetHeTbTxVector(trigger, hdr.GetAddr2());
-    // txParams.m_protection = std::make_unique<WifiCtsToSelfProtection>();
     txParams.m_protection = std::unique_ptr<WifiProtection>(new WifiNoProtection);
-    // txParams.m_protection =  std::make_unique<WifiCtsToSelfProtection>();
     txParams.m_acknowledgment = std::unique_ptr<WifiAcknowledgment>(new WifiNoAck());
-    // txParams.m_txDuration = m_phy->CalculateTxDuration(GetCtsSize(), txParams.m_txVector,
-    // m_phy->GetPhyBand(), m_staMac->GetAssociationId()); auto ctsToSelfProtection =
-    // static_cast<WifiCtsToSelfProtection*>(txParams.m_protection.get());
-    // ctsToSelfProtection->ctsTxVector.SetMode(modetxParams);
-    // ctsToSelfProtection->ctsTxVector.SetGuardInterval(trigger.GetGuardInterval());
-    // ctsToSelfProtection->ctsTxVector.SetNss(1);
-    // cts.SetDuration(FrameExchangeManager::GetTxDuration(GetCtsSize(), GetBssid(), txParams));
     Ptr<WifiMpdu> mpdu = Create<WifiMpdu>(packetCtsToSelf, cts);
-    // txParams.AddMpdu(mpdu);
-    // UpdateTxDuration(mpdu->GetHeader().GetAddr1(), txParams);
     Time ppduDuration = HePhy::ConvertLSigLengthToHeTbPpduDuration(trigger.GetUlLength(),
                                                                    txParams.m_txVector,
                                                                    m_phy->GetPhyBand());
-    // cts.SetDuration(hdr.GetDuration() - m_phy->GetSifs() - ppduDuration);
-    // cts.SetDuration(ppduDuration - hdr.GetDuration() - m_phy->GetSifs());
-    // ctsToSelfProtection->ctsTxVector =
-    // m_mac->GetWifiRemoteStationManager()->GetCtsToSelfTxVector();
-
-    // m_txParams = std::move(txParams);
-    // m_psduMap = std::move(WifiPsduMap{{staId, psdu}});
-    // SendPsduMap();
 
     m_staMac->GetChannelAccessManager()->NotifyNavStartNow(m_staMac->GetCfpMaxDuration());
 
@@ -3558,7 +3524,7 @@ HeFrameExchangeManager::ResetSensingTimeout()
     {
         m_Polling_Receive_mutex = 0;
         m_NDPA_Sounding_mutex = 0;
-        m_muScheduler->SensingTimeout();
+        m_muScheduler->ResetTxFormatSensingTimeout();
     }
 }
 

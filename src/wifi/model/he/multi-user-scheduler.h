@@ -69,9 +69,8 @@ class MultiUserScheduler : public Object
         UL_MU_TX,
         CS_TX,
 
-        // attempt to modify MU-MIMO for 11bf Polling Phase
+        // New transmission formats for IEEE 802.11bf
         BF_POLL_DL_TX,
-        // attempt to modify MU-OFDMA for 11bf NDPA Sounding Phase
         BF_NDPA_SOUNDING_TX,
         BF_NDPA_SOUNDING_TX_SU
     };
@@ -141,7 +140,7 @@ class MultiUserScheduler : public Object
 
     /*
      *************************************
-     Attempt to add support for IEEE 802.11bf 
+     Support for IEEE 802.11bf 
      Public Functions and Attributes for RR Multi User Scheduler
      *************************************
     */
@@ -153,7 +152,7 @@ class MultiUserScheduler : public Object
         MU_only = 2,
     };
 
-    /// Information to be provided in case of UL MU transmission
+    /// Information to be provided in polling phase transmission
     struct PollingMuInfo
     {
         WifiPsduMap psduMap;       //!< the MU PPDU to transmit
@@ -174,14 +173,36 @@ class MultiUserScheduler : public Object
      * \return the information required to perform a 11bf Polling Phase MU transmission
      */
     PollingMuInfo& GetPollingMuInfo(uint8_t linkId);
-
-    // modification for 11bf Polling Phase
+    /* 
+     * Check if the given address is a polling station and if it has responded.
+     * If the address is a polling station, it will be added to the list of polling
+     * candidates. If the address is not a polling station, it will be ignored.
+     *
+     * \param address the MAC address of the station to check
+    */
     virtual void CheckRespondedPollingStation(Mac48Address address) = 0;
+    /*
+     * Dedicated function to handle SU NDPA sounding phase.
+     */
     virtual bool DoSUNDPASoundingStation() = 0;
+    /*
+     * Get the type of sounding that the MultiUserScheduler is currently performing.
+     *
+     * \return the type of sounding
+     */
     virtual ns3::MultiUserScheduler::SoundingType GetSoundingType() = 0;
+    /*
+     * Get the number of polling candidates that are currently being polled.
+     *
+     * \return the number of polling candidates
+     */
     virtual size_t GetPollingCandidatesSize() = 0;
+    /*
+     * Reset the Tx Format Sensing Timeout. This method is called when the MultiUserScheduler
+     * is not performing any sounding and the Tx Format needs to be reset.
+     */
+    void ResetTxFormatSensingTimeout();
     bool m_nextSUSounding = 0; //!< Indicates next SU Sounding is still required>
-    void SensingTimeout();
 
   protected:
     /**
@@ -278,11 +299,10 @@ class MultiUserScheduler : public Object
      */
     virtual UlMuInfo ComputeUlMuInfo() = 0;
 
-    // Attempt to modify MU-MIMO for 11bf Polling Phase
     /**
-     * Prepare the information required to solicit an UL MU transmission.
+     * Prepare the information required to solicit an polling transmission.
      *
-     * \return the information required to solicit an UL MU transmission
+     * \return the information required to solicit an polling transmission
      */
     virtual PollingMuInfo ComputePollMuInfo() = 0;
 

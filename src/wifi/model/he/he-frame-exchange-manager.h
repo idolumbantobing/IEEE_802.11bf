@@ -447,11 +447,11 @@ class HeFrameExchangeManager : public VhtFrameExchangeManager
      * Take the necessary actions after that some beamforming reports are missing.
      */
     void BfReportTimeout(void);
-    Time m_lastCsTime;       //!< Duration of channel sounding process
-    bool m_csDurationOutput; //!< Whether to output the duration of channel sounding process
-    std::string m_csMode;    //! Wifi mode used for beamforming report feedback
-    bool m_NDPA_Sounding_mutex = 0;
-    bool m_Polling_Receive_mutex = 0;
+    Time m_lastCsTime;                //!< Duration of channel sounding process
+    bool m_csDurationOutput;          //!< Whether to output the duration of channel sounding process
+    std::string m_csMode;             //! Wifi mode used for beamforming report feedback
+    bool m_NDPA_Sounding_mutex = 0;   //!< Mutex to protect NDPA sounding phase
+    bool m_Polling_Receive_mutex = 0; //!< Mutex to protect Polling Frame reception
 };
 
 } // namespace ns3

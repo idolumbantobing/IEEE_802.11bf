@@ -1030,25 +1030,11 @@ RrMultiUserScheduler::ComputeUlMuInfo()
     return UlMuInfo{m_trigger, m_triggerMacHdr, std::move(m_txParams)};
 }
 
-/*
-*************************************
-Attempt to add Channel Sounding from ns3.37
-Private Functions for RR Multi User Scheduler
-*************************************
-*/
-
 bool
 RrMultiUserScheduler::IsChannelSoundingEnabled()
 {
     return !m_csInterval.IsZero() && m_apMac->GetChannelSoundingSupported();
 }
-
-/*
- *************************************
- Attempt to modify MU-MIMO from ns3.40
- Private Functions and Attributes for RR Multi User Scheduler
- *************************************
-*/
 
 bool
 RrMultiUserScheduler::IsPCFEnabled()
@@ -1103,7 +1089,7 @@ RrMultiUserScheduler::TryPollingPhase11bf()
     AcIndex primaryAc = m_edca->GetAccessCategory();
     if (m_staListDl[primaryAc].empty())
     {
-        SensingTimeout();
+        ResetTxFormatSensingTimeout();
         return TxFormat::SU_TX;
     }
 
@@ -1171,13 +1157,7 @@ RrMultiUserScheduler::TryPollingPhase11bf()
             staIt++;
             continue;
         }
-
-        // attempt to add channel sounding from ns3.37 : modification in TrySendingDlMuPpdu for
-        // current resource allocation setup
         HeRu::RuType currRuType;
-
-        // OFDMA
-        // currRuType = (m_candidates.size() < count ? ruType : HeRu::RU_26_TONE);
         currRuType = (m_candidatesPoll.size() < maxCount ? ruType : HeRu::RU_26_TONE);
         pollingFrame.SetAddr1(staIt->address);
         Ptr<WifiMpdu> mpdu = Create<WifiMpdu>(packetPollingFrame, pollingFrame);
@@ -1232,7 +1212,7 @@ RrMultiUserScheduler::TryPollingPhase11bf()
 
     if (m_candidatesPoll.empty())
     {
-        SensingTimeout();
+        ResetTxFormatSensingTimeout();
         return NO_TX;
     }
     else
@@ -1264,7 +1244,6 @@ RrMultiUserScheduler::TryPollingPhase11bf()
     hdrPollTrigger.SetDsNotTo();
     hdrPollTrigger.SetDsNotFrom();
     hdrPollTrigger.SetQosAckPolicy(ns3::WifiMacHeader::QosAckPolicy::NO_ACK);
-    // only consider stations that have setup the current link
 
     // CTS-to-Self header --------------------------------------------------
     WifiMacHeader ctsToSelf;
@@ -1388,7 +1367,7 @@ RrMultiUserScheduler::TryPollingPhase11bf()
         }
         else
         {
-            SensingTimeout();
+            ResetTxFormatSensingTimeout();
             return NO_TX;
         }
     }
@@ -1401,7 +1380,7 @@ RrMultiUserScheduler::TryPollingPhase11bf()
     }
     else
     {
-        SensingTimeout();
+        ResetTxFormatSensingTimeout();
         return NO_TX;
     }
 }
@@ -1552,16 +1531,10 @@ RrMultiUserScheduler::TryNDPASoundingPhase11bf(void)
         }
         if (m_candidatesCs.size() == 0)
         {
-            SensingTimeout();
+            ResetTxFormatSensingTimeout();
             return NO_TX;
         }
     }
-
-    /*
-    ********************************************************************
-    Following section follows the channel sounding implementation by J. Zhang
-    ********************************************************************
-    */
 
     // Set the number of rows in a compressed beamforming feedback matrix
     uint8_t nr = m_apMac->GetWifiPhy()->GetNumberOfAntennas();
@@ -1625,7 +1598,7 @@ RrMultiUserScheduler::TryNDPASoundingPhase11bf(void)
     if (!GetHeFem(m_linkId)->TryAddMpdu(mpduNdp, txParamsNdp, actualAvailableTime))
     {
         NS_LOG_DEBUG("Remaining TXOP duration is not enough for NDP in channel sounding");
-        SensingTimeout();
+        ResetTxFormatSensingTimeout();
         return NO_TX;
     }
 
@@ -1637,7 +1610,7 @@ RrMultiUserScheduler::TryNDPASoundingPhase11bf(void)
     {
         NS_LOG_DEBUG("Remaining TXOP duration is not enough for channel sounding");
 
-        SensingTimeout();
+        ResetTxFormatSensingTimeout();
         return NO_TX;
     }
 
@@ -1667,7 +1640,7 @@ RrMultiUserScheduler::TryNDPASoundingPhase11bf(void)
             }
             else
             {
-                SensingTimeout();
+                ResetTxFormatSensingTimeout();
                 return NO_TX;
             }
         }
@@ -1681,7 +1654,7 @@ RrMultiUserScheduler::TryNDPASoundingPhase11bf(void)
             }
             else
             {
-                SensingTimeout();
+                ResetTxFormatSensingTimeout();
                 return NO_TX;
             }
         }
@@ -1880,7 +1853,7 @@ RrMultiUserScheduler::TryNDPASoundingPhase11bf(void)
 
     if (m_candidatesReport.empty())
     {
-        SensingTimeout();
+        ResetTxFormatSensingTimeout();
         return NO_TX;
     }
     else

@@ -54,13 +54,32 @@ class RrMultiUserScheduler : public MultiUserScheduler
 
     /*
     *************************************
-    Changes to add support for IEEE 802.11bf
+    Add support for IEEE 802.11bf
     Public Functions and Attributes for RR Multi User Scheduler
     *************************************
     */
+    /*
+     * Notify the Multi-user Scheduler that a station associated with the AP
+     * has responded to a polling request.
+     *
+     * \param address the MAC address of the station
+     */
     void CheckRespondedPollingStation(Mac48Address address) override;
+    /*
+     * Dedicated function to handle SU NDPA sounding phase for each station (using RR MU Scheduler).
+    */
     bool DoSUNDPASoundingStation() override;
+    /*
+     * Get the number of polling candidates 
+     * \return the number of polling candidates
+     * 
+     */
     size_t GetPollingCandidatesSize() override;
+    /*
+     * Get the sounding type of the Multi-user Scheduler.
+     * \return the sounding type of the Multi-user Scheduler
+     * 
+     */
     ns3::MultiUserScheduler::SoundingType GetSoundingType() override;
 
   protected:
@@ -183,30 +202,24 @@ class RrMultiUserScheduler : public MultiUserScheduler
     WifiTxParameters m_txParams;           //!< TX parameters
 
     /*
-     *************************************
-     Attempt to add Channel Sounding from ns3.37
-     Private Functions and Attributes for RR Multi User Scheduler
-     *************************************
+    *************************************
+    Add support for IEEE 802.11bf
+    Private Functions and Attributes for RR Multi User Scheduler
+    *************************************
     */
     /**
      * Check whether channel sounding is enabled. Channel sounding is disabled if channel sounding
-     * interval is 0. \return whether channel sounding is enabled.
+     * interval is 0. 
+     * \return whether channel sounding is enabled.
+     * 
      */
     bool IsChannelSoundingEnabled();
-
     /*
-     *************************************
-     Attempt to modify MU-OFDMA from ns3.40
-     Private Functions and Attributes for RR Multi User Scheduler
-     *************************************
-    */
-
-    // attempt to modify MU-OFDMA for 11bf Polling Phase
+     * Compute the MU Info for the polling phase of 802.11bf.
+     * \return the PollingMuInfo 
+     * 
+     */
     PollingMuInfo ComputePollMuInfo() override;
-    CtrlTriggerHeader m_triggerUlPoll;        //!< the Trigger Frame used to solicit TB PPDUs
-    WifiMacHeader m_macHdrTriggerUlPoll;      //!< the MAC header for the Trigger Frame
-    WifiTxParameters m_txParamsTriggerUlPoll; //!< the transmission parameters for the Trigger Frame
-
     /**
      * Check whether PCF is enabled
      *
@@ -226,6 +239,9 @@ class RrMultiUserScheduler : public MultiUserScheduler
      */
     virtual TxFormat TryNDPASoundingPhase11bf();
 
+    CtrlTriggerHeader m_triggerUlPoll;        //!< the Trigger Frame used to solicit TB PPDUs
+    WifiMacHeader m_macHdrTriggerUlPoll;      //!< the MAC header for the Trigger Frame
+    WifiTxParameters m_txParamsTriggerUlPoll; //!< the transmission parameters for the Trigger Frame
     SoundingType m_soundingType = SoundingType::MU_only; //!< Type of sounding to perform
     std::list<CandidateInfo> m_candidatesCs;     //!< Candidate stations for channel sounding
     std::list<CandidateInfo> m_candidatesCsSU; //!< Candidate stations for SU transmission channel sounding
