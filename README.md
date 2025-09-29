@@ -42,17 +42,25 @@ If you use this module in your research, please cite following:
 
 
 ```bibtex8
-@misc{keshtiarast2025nextgensensingmeetslegacy,
-      title={When Next-Gen Sensing Meets Legacy Wi-Fi: Performance Analyses of IEEE 802.11bf and IEEE 802.11ax Coexistence}, 
-      author={Navid Keshtiarast and Pradyumna Kumar Bishoyi and Ido Manuel Lumbantobing and Marina Petrova},
-      year={2025},
-      eprint={2503.04637},
-      archivePrefix={arXiv},
-      primaryClass={cs.NI},
-      url={https://arxiv.org/abs/2503.04637}, 
+@inproceedings{10.1145/3747204.3747221,
+author = {Lumbantobing, Ido Manuel and Keshtiarast, Navid and Bishoyi, Pradyumna Kumar and Petrova, Marina},
+title = {A ns-3 Implementation of Wi-Fi Sensing MAC for Sub-7 GHz Bands},
+year = {2025},
+isbn = {9798400715174},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3747204.3747221},
+doi = {10.1145/3747204.3747221},
+abstract = {Wi-Fi sensing is emerging as a cost-effective, infrastructure-ready solution for various applications due to its widespread deployment, unlicensed spectrum access, and low hardware costs. To standardize this capability, the IEEE 802.11 working group has established Task Group 802.11bf to define enhancements for Wi-Fi sensing in both the sub-7 GHz and mmWave bands. Although recent studies explore the technical aspects and protocol specifications of 802.11bf, there is a lack of a system simulation framework that allows for an in-depth analysis of the sensing performance. In this paper, we address this gap by presenting the first implementation of IEEE 802.11bf MAC-layer Wi-Fi sensing for the sub-7 GHz band in the ns-3 network simulator. Our implementation extends the ns-3.40 802.11ax Wi-Fi module with new MAC-layer features that support channel access and channel sounding mechanisms for Wi-Fi sensing. Furthermore, we evaluated the sensing performance of the 802.11bf protocol by analyzing sensing latency across different network scenarios. Our implementation, which is also publicly available, sets the groundwork for future Wi-Fi sensing research.},
+booktitle = {Proceedings of the 2025 International Conference on Ns-3},
+pages = {46–53},
+numpages = {8},
+keywords = {ns-3, IEEE 802.11bf, Wi-Fi sensing, MAC},
+location = {
+},
+series = {ICNS3 '25}
 }
 ```
-N. Keshtiarast, P. K. Bishoyi, I. M. Lumbantobing, and M. Petrova, “When Sensing Meets Communication: Coexistence analysis of IEEE 802.11bf and IEEE 802.11ax,” (Accepted for Publication in IEEE ICC 2025).
 
 </details>
 
